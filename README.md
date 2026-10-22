@@ -33,6 +33,20 @@ Mobile-first web app for managing drama club members, attendance, and payments i
 5. Run `npm run db:seed` to populate with sample data
 6. Run `npm run dev` to start the development server
 
+### Recovering a Super Admin password
+
+If you have authorized database access but cannot sign in as a Super Admin, run
+`npm run db:reset-admin-password` from an interactive terminal. It loads the
+local environment, displays the database host/name (never the connection
+credentials), requires confirmation of both the target account and database,
+and prompts for the new password without echoing it. It only resets an existing,
+active `SUPER_ADMIN` account and clears its failed-login lockout; it does not
+create accounts, change roles, or activate users. Before running it for a
+deployment, temporarily configure `DATABASE_URL` for that deployment's
+database, verify the displayed target carefully, then restore your local
+development configuration. Never put a password in a command argument or
+commit environment files.
+
 ## Existing Features
 
 ### Database Schema

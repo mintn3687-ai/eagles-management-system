@@ -13,6 +13,7 @@
     "test:integration": "tsx tests/integration.ts",
     "test:isolated": "node scripts/test-isolated.mjs",
     "db:bootstrap": "tsx scripts/bootstrap-admin.ts",
+    "db:reset-admin-password": "tsx scripts/reset-admin-password.ts",
     "db:generate": "prisma generate",
     "db:migrate": "node scripts/prisma.mjs migrate deploy",
     "db:migrate:dev": "node scripts/prisma.mjs migrate dev",

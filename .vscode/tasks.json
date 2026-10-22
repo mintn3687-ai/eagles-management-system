@@ -1,0 +1,16 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Reset Super Admin password",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"db:reset-admin-password"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
+}
