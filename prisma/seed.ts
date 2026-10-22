@@ -36,6 +36,17 @@ async function main() {
         emergencyContactPhone: phoneSchema.parse('254700000099'), status: sample.status,
         joinedAt: parseNairobiDate('2026-10-01'), notes: 'Fictional example record. No fees have been paid.',
       } })
+      const currentSeason = await tx.season.findFirst({ where: { isCurrent: true }, select: { id: true } })
+      if (currentSeason) {
+        await tx.seasonMembership.createMany({ skipDuplicates: true, data: [{
+          seasonId: currentSeason.id,
+          memberId: member.id,
+          status: member.status,
+          feesOwed: 0,
+          feesPaid: 0,
+          roleInSeason: 'MEMBER',
+        }] })
+      }
       const statusRows = await tx.$queryRaw<Array<{ exists: boolean }>>`
         SELECT EXISTS (SELECT 1 FROM "MemberStatusHistory" WHERE "memberId" = ${member.id}) AS "exists"
       `

@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { z } from 'zod'
 import { pageUser } from '@/lib/page-access'
-import { prisma } from '@/lib/db'
+import { adminReadService } from '@/modules/admin/read-service'
 import { getDashboardData } from '@/lib/admin-data'
 import { getClubSettings } from '@/lib/admin-settings'
 import { currentNairobiMonth } from '@/lib/attendance-analytics'
@@ -24,16 +24,13 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const requestedPage = pageSchema.parse(params.page ?? 1)
   const overduePage = pageSchema.parse(params.overduePage ?? 1)
   const inviteWhere = { isActive: true, passwordHash: null, ...(actor.role === 'SUPER_ADMIN' ? {} : { role: 'MEMBER' as const }) }
-  const inviteTotal = await prisma.user.count({ where: inviteWhere })
+  const [inviteTotal] = await adminReadService.listInvitableUsers(inviteWhere, requestedPage, 20)
   const invitationPageCount = Math.max(1, Math.ceil(inviteTotal / 20))
   const page = Math.min(requestedPage, invitationPageCount)
-  const [dashboard, settings, users] = await Promise.all([
+  const [[, users], dashboard, settings] = await Promise.all([
+    adminReadService.listInvitableUsers(inviteWhere, page, 20),
     getDashboardData(overduePage),
     getClubSettings(),
-    prisma.user.findMany({
-      where: inviteWhere,
-      select: { id: true, name: true, email: true }, orderBy: [{ name: 'asc' }, { id: 'asc' }], skip: (page - 1) * 20, take: 21,
-    }),
   ])
   const statusCounts = new Map(dashboard.membersByStatus.map((row) => [row.status, row._count._all]))
   const rehearsalMessage = dashboard.nextRehearsal

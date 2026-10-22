@@ -1,10 +1,23 @@
 import { redirect } from 'next/navigation'
 import type { UserRole } from '@prisma/client'
-import { AccessError, requireRole, requireUser } from './permissions'
+import { AccessError, requirePermission, requireRole, requireUser } from './permissions'
+import type { Permission } from './permissions'
 
 export async function pageUser(minRole?: UserRole) {
   try {
     return minRole ? await requireRole(minRole) : await requireUser()
+  } catch (error) {
+    if (!(error instanceof AccessError)) throw error
+    if (error.code === 'LOGIN') redirect('/login')
+    if (error.code === 'CONSENT') redirect('/consent')
+    if (error.code === 'RESTRICTED') redirect('/member')
+    redirect('/forbidden')
+  }
+}
+
+export async function pagePermission(permission: Permission) {
+  try {
+    return await requirePermission(permission)
   } catch (error) {
     if (!(error instanceof AccessError)) throw error
     if (error.code === 'LOGIN') redirect('/login')

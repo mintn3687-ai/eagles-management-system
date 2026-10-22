@@ -8,6 +8,7 @@ import { memberCreateSchema, memberDetailsSchema, statusChangeSchema, roleChange
 import { hashInviteToken, newInviteToken } from '../auth/invites'
 import { recordInitialMemberStatus, recordMemberStatusChange } from './status-history'
 import { MemberError } from './errors'
+import { addMembersToCurrentSeason, syncCurrentSeasonMemberStatus } from '@/modules/seasons/service'
 
 export async function assertEmailAvailable(tx: Prisma.TransactionClient, email: string, memberId?: string, userId?: string | null) {
   const [member, user] = await Promise.all([
@@ -30,6 +31,7 @@ export async function createMember(input: unknown) {
     const member = await tx.member.create({ data: {
       ...details, userId: user.id, status, joinedAt,
     } })
+    await addMembersToCurrentSeason(tx, [{ memberId: member.id, status }])
     await recordInitialMemberStatus(tx, member.id, status, joinedAt)
     await tx.invite.create({ data: { userId: user.id, tokenHash: hashInviteToken(token), expiresAt: new Date(Date.now() + 7 * 86400000) } })
     await tx.auditLog.createMany({ data: [
@@ -73,6 +75,7 @@ export async function changeMemberStatus(id: unknown, input: unknown) {
     if (user?.role === 'SUPER_ADMIN' && ['INACTIVE', 'SUSPENDED'].includes(data.status)) throw new MemberError('Change this user’s role before restricting their membership.')
     const effectiveAt = new Date()
     await tx.member.update({ where: { id: memberId }, data: { status: data.status } })
+    await syncCurrentSeasonMemberStatus(tx, memberId, data.status)
     await recordMemberStatusChange(tx, memberId, member.status, data.status, effectiveAt)
     await tx.auditLog.create({ data: {
       actorId: actor.id, action: 'MEMBER_STATUS_CHANGED', entity: 'Member', entityId: memberId,

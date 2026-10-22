@@ -1,8 +1,8 @@
 import Link from 'next/link'
-import { prisma } from '@/lib/db'
 import { requireRole } from '@/lib/permissions'
 import { auditFilterSchema } from '@/lib/validation/admin'
 import { formatNairobiDate, parseNairobiDate } from '@/lib/dates'
+import { adminReadService } from '@/modules/admin/read-service'
 
 const PAGE_SIZE = 25
 type Params = Record<string, string | string[] | undefined>
@@ -27,11 +27,10 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
       { actor: { is: { email: { startsWith: filters.q } } } },
     ] } : {}),
   }
-  const total = await prisma.auditLog.count({ where })
+  const total = await adminReadService.auditCount(where)
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const page = Math.min(filters.page, pageCount)
-  const records = await prisma.auditLog.findMany({ where, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip: (page - 1) * PAGE_SIZE, take: PAGE_SIZE,
-    select: { id: true, action: true, entity: true, entityId: true, details: true, createdAt: true, actor: { select: { name: true, email: true } } } })
+  const records = await adminReadService.auditPage(where, page, PAGE_SIZE)
   const href = (nextPage: number) => `/admin/audit?${new URLSearchParams({ q: filters.q, from: filters.from, to: filters.to, page: String(nextPage) })}`
   return <div className="space-y-6">
     <div><h1>Audit log</h1><p className="text-slate-600">Review who changed club records, what changed, and when.</p></div>

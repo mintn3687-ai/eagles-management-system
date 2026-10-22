@@ -25,14 +25,6 @@ export const transferAdminSchema = z.object({
   confirmation: adminConfirmationSchema,
 }).strict()
 
-export const seasonRolloverSchema = z.object({
-  memberIds: z.array(userIdSchema).min(1, 'Select at least one member.').max(50, 'Choose no more than 50 members at once.'),
-  status: z.enum(['INACTIVE', 'ALUMNI']),
-  confirmation: z.literal('ROLLOVER', { errorMap: () => ({ message: 'Type ROLLOVER to confirm.' }) }),
-}).strict().refine((data) => new Set(data.memberIds).size === data.memberIds.length, {
-  message: 'A member was selected more than once.', path: ['memberIds'],
-})
-
 const dateKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
   const date = new Date(`${value}T00:00:00Z`)
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value

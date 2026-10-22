@@ -1,11 +1,11 @@
 import Link from 'next/link'
 import { z } from 'zod'
 import { pageUser } from '@/lib/page-access'
-import { prisma } from '@/lib/db'
 import { formatNairobiDate } from '@/lib/dates'
 import { getCurrentFee } from '@/lib/fees'
 import { formatKES } from '@/lib/money'
 import { saveFeeSettingAction } from './actions'
+import { adminReadService } from '@/modules/admin/read-service'
 
 const PAGE_SIZE = 20
 const pageSchema = z.coerce.number().int().min(1).max(10000).catch(1)
@@ -16,19 +16,14 @@ export default async function FeesPage({ searchParams }: { searchParams: Promise
   const error = typeof params.error === 'string' ? params.error : ''
   const success = typeof params.success === 'string' ? params.success : ''
   const requestedPage = pageSchema.parse(params.historyPage ?? '1')
-  const historyTotal = await prisma.feeSetting.count()
+  const historyTotal = await adminReadService.feeHistoryCount()
   const historyPageCount = Math.max(1, Math.ceil(historyTotal / PAGE_SIZE))
   const historyPage = Math.min(requestedPage, historyPageCount)
 
   const [registration, subscription, history] = await Promise.all([
     getCurrentFee('REGISTRATION'),
     getCurrentFee('SUBSCRIPTION'),
-    prisma.feeSetting.findMany({
-      orderBy: [{ effectiveFrom: 'desc' }, { id: 'desc' }],
-      skip: (historyPage - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
-      include: { createdBy: { select: { name: true } } },
-    }),
+    adminReadService.feeHistoryPage(historyPage, PAGE_SIZE),
   ])
 
   return <div className="space-y-6">

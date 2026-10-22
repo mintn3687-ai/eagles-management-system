@@ -3,13 +3,16 @@ import { auth } from '@/auth'
 import { prisma } from '@/lib/db'
 import type { UserRole } from '@prisma/client'
 import { passwordVersion } from './auth/password-version'
+import { hasPermission, permissionRoles, roleLevel } from './permission-rules'
+import type { Permission } from './permission-rules'
 
 export class AccessError extends Error {
   constructor(public status: 401 | 403, public code: 'LOGIN' | 'ROLE' | 'CONSENT' | 'RESTRICTED') {
     super(status === 401 ? 'Please sign in.' : 'You do not have access to this action.')
   }
 }
-export const roleLevel: Record<UserRole, number> = { MEMBER: 1, COMMITTEE: 2, SUPER_ADMIN: 3 }
+export { hasPermission, permissionRoles, roleLevel }
+export type { Permission }
 
 export async function requireUser() {
   const session = await auth()
@@ -34,4 +37,8 @@ export async function requireRole(minRole: UserRole) {
   if (!user.consentAcceptedAt) throw new AccessError(403, 'CONSENT')
   if (roleLevel[user.role] < roleLevel[minRole]) throw new AccessError(403, 'ROLE')
   return user
+}
+
+export async function requirePermission(permission: Permission) {
+  return requireRole(permissionRoles[permission])
 }

@@ -1,12 +1,12 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { pageUser } from '@/lib/page-access'
-import { prisma } from '@/lib/db'
 import { attendancePercent, currentNairobiMonth, formatAnalyticsMonth, getMemberAttendanceHistory, getMemberMissedRehearsals } from '@/lib/attendance-analytics'
 import { formatNairobiDate } from '@/lib/dates'
 import { analyticsMonthSchema } from '@/lib/validation/analytics'
 import { userIdSchema } from '@/lib/validation'
 import { z } from 'zod'
+import { adminReadService } from '@/modules/admin/read-service'
 
 const pageSchema = z.coerce.number().int().min(1).max(10000).catch(1)
 const PAGE_SIZE = 50
@@ -18,7 +18,7 @@ export default async function AnalyticsMemberPage({ params, searchParams }: {
   await pageUser('COMMITTEE')
   const { memberId } = await params
   if (!userIdSchema.safeParse(memberId).success) notFound()
-  const member = await prisma.member.findUnique({ where: { id: memberId }, select: { id: true, fullName: true, joinedAt: true } })
+  const member = await adminReadService.analyticsMember(memberId)
   if (!member) notFound()
 
   const currentMonth = currentNairobiMonth()

@@ -1,9 +1,9 @@
 import Link from 'next/link'
 import { pageUser } from '@/lib/page-access'
-import { prisma } from '@/lib/db'
 import { memberListSchema, memberStatuses } from '@/lib/validation/members'
 import { memberWhere, memberOrder, memberQueryString } from '@/lib/members/query'
 import { formatNairobiDate } from '@/lib/dates'
+import { adminReadService } from '@/modules/admin/read-service'
 
 export default async function MembersPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await pageUser('COMMITTEE')
@@ -11,11 +11,7 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
   if (!parsed.success) return <section className="card"><h1>Invalid filters</h1><Link className="btn-primary" href="/admin/members">Reset member list</Link></section>
   const filters = parsed.data
   const where = memberWhere(filters)
-  const [members, total] = await prisma.$transaction([
-    prisma.member.findMany({ where, orderBy: memberOrder(filters), skip: (filters.page - 1) * 20, take: 20,
-      select: { id: true, fullName: true, phone: true, email: true, status: true, joinedAt: true } }),
-    prisma.member.count({ where }),
-  ])
+  const [members, total] = await adminReadService.memberList(where, memberOrder(filters), filters.page, 20)
   return <div className="space-y-6"><div><h1>Member register</h1><div className="flex flex-wrap gap-3"><Link className="btn-primary" href="/admin/members/new">Add member</Link><Link className="btn-secondary" href="/admin/members/import">Import CSV</Link><a className="btn-secondary" href={`/admin/members/export?${memberQueryString(filters)}`}>Export filtered CSV</a></div></div>
     <form className="card grid gap-4 sm:grid-cols-2" method="GET"><div className="sm:col-span-2"><label className="label" htmlFor="q">Search name, phone or email</label><input className="input" id="q" name="q" maxLength={100} defaultValue={filters.q} /></div><div><label className="label" htmlFor="status">Status</label><select className="input" name="status" id="status" defaultValue={filters.status}><option value="">All statuses</option>{memberStatuses.map((s) => <option key={s} value={s}>{s.replaceAll('_', ' ')}</option>)}</select></div><div><label className="label" htmlFor="sort">Sort by</label><select className="input" name="sort" id="sort" defaultValue={filters.sort}><option value="name">Name</option><option value="joined">Join date</option></select></div><div><label className="label" htmlFor="direction">Order</label><select className="input" name="direction" id="direction" defaultValue={filters.direction}><option value="asc">Ascending</option><option value="desc">Descending</option></select></div><button className="btn-primary self-end" type="submit">Apply filters</button></form>
     <p>{total} {total === 1 ? 'member' : 'members'} found · Page {filters.page} of {Math.max(1, Math.ceil(total / 20))}</p>

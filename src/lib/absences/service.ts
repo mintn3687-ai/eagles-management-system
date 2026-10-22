@@ -8,6 +8,7 @@ import { reviewSingleSchema, reviewBulkSchema, absenceListSchema, type AbsenceFi
 import { nairobiMonthBounds } from '../dates'
 
 export class AbsenceError extends Error {}
+export type AbsenceListItem = Awaited<ReturnType<typeof listAbsences>>['records'][number]
 export function absenceErrorMessage(error: unknown): string {
   if (error instanceof z.ZodError) return error.issues[0].message
   if (error instanceof AbsenceError || error instanceof AccessError) return error.message

@@ -3,6 +3,8 @@ import { unstable_cache } from 'next/cache'
 import { Prisma, type AttendanceStatus, type ReviewStatus } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { classifyAttendanceForAnalytics, type AttendanceAnalyticsClass } from '@/lib/absences/counting'
+import { attendancePercent } from '@/lib/attendance-rules'
+export { attendancePercent } from '@/lib/attendance-rules'
 import { nairobiDateKey, parseNairobiDate } from '@/lib/dates'
 
 type AttendanceBucket = {
@@ -155,11 +157,6 @@ const cachedMemberHistoryBuckets = unstable_cache(
   ['attendance-analytics-member-history-v2'],
   { revalidate: 3600 },
 )
-
-export function attendancePercent(present: number, missed: number): number {
-  const denominator = present + missed
-  return denominator === 0 ? 0 : Math.round((present / denominator) * 1000) / 10
-}
 
 export function getMonthRange(monthKey: string) {
   return monthBounds(monthKey)

@@ -9,6 +9,10 @@ export default async function AdminLayout({ children }: { children: ReactNode })
       <Link className="btn-secondary" href="/admin">Dashboard</Link>
       <Link className="btn-secondary" href="/admin/members">Members</Link>
       <Link className="btn-secondary" href="/admin/rehearsals">Rehearsals</Link>
+      <Link className="btn-secondary" href="/admin/meetings">Meetings</Link>
+      <Link className="btn-secondary" href="/admin/elections">Elections</Link>
+      <Link className="btn-secondary" href="/admin/productions">Productions</Link>
+      <Link className="btn-secondary" href="/admin/finance">Finance</Link>
       <Link className="btn-secondary" href="/admin/analytics">Attendance</Link>
       <Link className="btn-secondary" href="/admin/absences">Absences</Link>
       <Link className="btn-secondary" href="/admin/payments">Payments</Link>

@@ -1,11 +1,11 @@
 import Link from 'next/link'
-import { prisma } from '@/lib/db'
 import { nairobiDateKey, formatNairobiDate } from '@/lib/dates'
 import { pageUser } from '@/lib/page-access'
 import { formatKES } from '@/lib/money'
 import { paymentListSchema } from '@/lib/validation/fees'
 import { paymentWhere } from '@/lib/payments-query'
 import { recordManualPaymentAction, waiveFeeAction } from './actions'
+import { adminReadService } from '@/modules/admin/read-service'
 
 function buildQueryString(filters: Record<string, string | number | undefined>, page?: number, memberPage?: number) {
   const params = new URLSearchParams()
@@ -32,22 +32,13 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
 
   const filters = parsed.data
   const where = paymentWhere(filters)
-  const memberCount = await prisma.member.count()
+  const [memberCount] = await adminReadService.paymentMemberOptions(filters.memberPage, 20)
   const memberPageCount = Math.max(1, Math.ceil(memberCount / 20))
   const memberPage = Math.min(filters.memberPage, memberPageCount)
 
-  const [payments, total, totalRegistration, totalSubscription, members] = await Promise.all([
-    prisma.payment.findMany({
-      where,
-      orderBy: [{ paidAt: { sort: 'desc', nulls: 'last' } }, { id: 'desc' }],
-      skip: (filters.page - 1) * 20,
-      take: 20,
-      include: { member: { select: { fullName: true } } },
-    }),
-    prisma.payment.count({ where }),
-    prisma.payment.aggregate({ where: { ...where, type: 'REGISTRATION', status: 'SUCCESS' }, _sum: { amount: true } }),
-    prisma.payment.aggregate({ where: { ...where, type: 'SUBSCRIPTION', status: 'SUCCESS' }, _sum: { amount: true } }),
-    prisma.member.findMany({ orderBy: [{ fullName: 'asc' }, { id: 'asc' }], skip: (memberPage - 1) * 20, take: 20, select: { id: true, fullName: true } }),
+  const [[payments, total, totalRegistration, totalSubscription], [, members]] = await Promise.all([
+    adminReadService.paymentLedger(where, filters.page, 20),
+    adminReadService.paymentMemberOptions(memberPage, 20),
   ])
 
   const exportHref = `/admin/payments/export?${buildQueryString(filters)}`

@@ -3,8 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/db'
 import { AccessError, requireRole } from '@/lib/permissions'
 import { lockRow } from '@/lib/row-lock'
-import { recordMemberStatusChange } from '@/lib/members/status-history'
-import { clubSettingsSchema, seasonRolloverSchema, teamRoleChangeSchema, transferAdminSchema } from '@/lib/validation/admin'
+import { clubSettingsSchema, teamRoleChangeSchema, transferAdminSchema } from '@/lib/validation/admin'
 import type { ClubSettings } from '@/lib/validation/admin'
 
 export class AdminManagementError extends Error {}
@@ -74,32 +73,4 @@ export async function transferSuperAdmin(input: unknown) {
       { actorId: actor.id, action: 'SUPER_ADMIN_TRANSFERRED_FROM', entity: 'User', entityId: actor.id, details: { memberId: data.memberId, name: target.fullName } },
     ] })
   })
-}
-
-export async function rolloverMembers(input: unknown) {
-  const actor = await requireRole('SUPER_ADMIN')
-  const data = seasonRolloverSchema.parse(input)
-  const ids = [...data.memberIds].sort()
-  await prisma.$transaction(async (tx) => {
-    for (const id of ids) await lockRow(tx, 'Member', id)
-    const members = await tx.member.findMany({
-      where: { id: { in: ids }, status: 'ACTIVE' },
-      select: { id: true, fullName: true, status: true, user: { select: { role: true } } },
-    })
-    if (members.length !== ids.length) throw new AdminManagementError('One or more selected members are no longer active. Refresh the list and try again.')
-    if (members.some((member) => member.user?.role === 'SUPER_ADMIN')) throw new AdminManagementError('Transfer Super Admin access before including that account in a season rollover.')
-    const now = new Date()
-    for (const member of members) {
-      if (member.status === data.status) continue
-      await tx.member.update({ where: { id: member.id }, data: { status: data.status } })
-      await recordMemberStatusChange(tx, member.id, member.status, data.status, now)
-      await tx.auditLog.create({
-        data: {
-          actorId: actor.id, action: 'SEASON_ROLLOVER_STATUS_CHANGED', entity: 'Member', entityId: member.id,
-          details: { name: member.fullName, from: member.status, to: data.status },
-        },
-      })
-    }
-  })
-  return ids.length
 }

@@ -41,7 +41,8 @@
     "prisma/**/*.ts",
     "src/**/*",
     "tests/**/*.ts",
-    ".next/dev/types/**/*.ts"
+    ".next/dev/types/**/*.ts",
+    ".next-integration/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

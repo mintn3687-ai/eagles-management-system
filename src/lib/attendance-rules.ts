@@ -1,5 +1,10 @@
 export type SelfAttendanceStatus = 'PRESENT' | 'ABSENT' | 'NO_RESPONSE' | null
 
+export function attendancePercent(present: number, missed: number): number {
+  const denominator = present + missed
+  return denominator === 0 ? 0 : Math.round((present / denominator) * 1000) / 10
+}
+
 export function evaluateCheckInAttempt(input: {
   submittedCode: string
   correctCode: string | null

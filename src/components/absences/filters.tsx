@@ -1,7 +1,8 @@
 'use client'
 import Link from 'next/link'
+import type { AbsenceFilters } from '@/lib/validation/absences'
 
-export function AbsenceFiltersComponent({ filters }: { filters: any }) {
+export function AbsenceFiltersComponent({ filters }: { filters: AbsenceFilters }) {
   return <section className="card">
     <form className="grid gap-4 sm:grid-cols-4" method="GET">
       <div><label className="label" htmlFor="month">Month</label><input className="input" type="month" id="month" name="month" defaultValue={filters.month ?? ''} /></div>

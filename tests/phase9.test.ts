@@ -24,7 +24,7 @@ const routes = [
   ['/admin/audit', 'COMMITTEE', 'src/app/admin/audit/page.tsx', 'requireRole'],
   ['/admin/fees', 'COMMITTEE', 'src/app/admin/fees/page.tsx', 'pageUser'],
   ['/admin/members', 'COMMITTEE', 'src/app/admin/members/page.tsx', 'pageUser'],
-  ['/admin/members/[id]', 'COMMITTEE', 'src/app/admin/members/[id]/page.tsx', 'pageUser'],
+  ['/admin/members/[id]', 'COMMITTEE', 'src/app/admin/members/[id]/page.tsx', 'pagePermission'],
   ['/admin/members/import', 'COMMITTEE', 'src/app/admin/members/import/page.tsx', 'pageUser'],
   ['/admin/members/new', 'COMMITTEE', 'src/app/admin/members/new/page.tsx', 'pageUser'],
   ['/admin/payments', 'COMMITTEE', 'src/app/admin/payments/page.tsx', 'pageUser'],
@@ -34,13 +34,23 @@ const routes = [
   ['/admin/rehearsals/generate', 'COMMITTEE', 'src/app/admin/rehearsals/generate/page.tsx', 'pageUser'],
   ['/admin/settings', 'SUPER_ADMIN', 'src/app/admin/settings/page.tsx', 'pageUser'],
   ['/admin/team', 'SUPER_ADMIN', 'src/app/admin/team/page.tsx', 'pageUser'],
-  ['/admin/rollover', 'SUPER_ADMIN', 'src/app/admin/rollover/page.tsx', 'pageUser'],
+  ['/admin/rollover', 'SUPER_ADMIN', 'src/app/admin/rollover/page.tsx', 'pagePermission'],
+  ['/admin/meetings', 'COMMITTEE', 'src/app/admin/meetings/page.tsx', 'pagePermission'],
+  ['/admin/meetings/[id]', 'COMMITTEE', 'src/app/admin/meetings/[id]/page.tsx', 'pagePermission'],
+  ['/member/meetings', 'MEMBER', 'src/app/member/meetings/page.tsx', 'pagePermission'],
   ['GET /admin/export', 'SUPER_ADMIN', 'src/app/admin/export/route.ts', 'requireRole'],
   ['GET /admin/analytics/export', 'COMMITTEE', 'src/app/admin/analytics/export/route.ts', 'requireRole'],
   ['GET /admin/members/export', 'COMMITTEE', 'src/app/admin/members/export/route.ts', 'requireRole'],
   ['GET /admin/payments/export', 'COMMITTEE', 'src/app/admin/payments/export/route.ts', 'requireRole'],
 ] as const
 const roles = ['MEMBER', 'COMMITTEE', 'SUPER_ADMIN'] as const
+const pagePermissions: Record<string, string> = {
+  '/admin/members/[id]': 'members:read',
+  '/admin/rollover': 'seasons:manage',
+  '/admin/meetings': 'meetings:manage',
+  '/admin/meetings/[id]': 'meetings:manage',
+  '/member/meetings': 'meetings:read',
+}
 
 describe('admin role access', () => {
   beforeEach(() => {
@@ -51,9 +61,13 @@ describe('admin role access', () => {
     } as never)
   })
 
-  it.each(routes)('$0 declares its $1 guard', (_route, required, source, guard) => {
+  it.each(routes)('$0 declares its $1 guard', (route, required, source, guard) => {
     const sourceText = readFileSync(resolve(process.cwd(), source), 'utf8')
-    expect(sourceText).toContain(`${guard}('${required}')`)
+    const permission = pagePermissions[route] ?? null
+    const declaration = permission
+      ? `pagePermission('${permission}')`
+      : `${guard}('${required}')`
+    expect(sourceText).toContain(declaration)
   })
 
   it.each(routes.flatMap(([route, required]) => roles.map((role) => ({ route, required, role }))))(

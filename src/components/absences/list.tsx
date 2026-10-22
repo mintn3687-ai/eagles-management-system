@@ -2,8 +2,9 @@
 import { useActionState } from 'react'
 import { reviewSingleAction, reviewBulkAction } from '@/app/admin/absences/actions'
 import { SubmitButton } from '@/components/submit-button'
+import type { AbsenceListItem } from '@/lib/absences/service'
 
-export function AbsenceList({ records }: { records: any[] }) {
+export function AbsenceList({ records }: { records: AbsenceListItem[] }) {
   const [bulkState, bulkAction] = useActionState(reviewBulkAction, {})
   const [singleState, singleAction] = useActionState(reviewSingleAction, {})
   if (!records.length) {

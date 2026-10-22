@@ -1,10 +1,10 @@
 generator client {
-  provider        = "prisma-client-js"
+  provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DATABASE_URL_UNPOOLED")
 }
 
@@ -77,49 +77,211 @@ enum PaymentMethod {
   OTHER
 }
 
+enum SeasonMembershipStatus {
+  PENDING_REGISTRATION
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  ALUMNI
+}
+
+enum MeetingStatus {
+  DRAFT
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum MinutesStatus {
+  DRAFT
+  APPROVED
+}
+
+enum MotionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  DEFERRED
+}
+
+enum ActionItemStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum ElectionStatus {
+  DRAFT
+  NOMINATIONS_OPEN
+  VOTING_OPEN
+  CLOSED
+  RESULTS_PUBLISHED
+}
+
+enum NominationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ElectionTieRule {
+  CO_WINNERS
+  NO_WINNER
+}
+
+enum BallotChoiceType {
+  CANDIDATE
+  ABSTAIN
+  NONE_OF_ABOVE
+}
+
+enum ProductionStatus {
+  PLANNING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum ProductionTaskStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum CastingType {
+  CAST
+  UNDERSTUDY
+}
+
+enum AssetCategory {
+  PROP
+  COSTUME
+  EQUIPMENT
+  OTHER
+}
+
+enum AssetCondition {
+  EXCELLENT
+  GOOD
+  FAIR
+  NEEDS_REPAIR
+}
+
+enum AssetStatus {
+  AVAILABLE
+  CHECKED_OUT
+  RETIRED
+}
+
+enum FinanceEntryType {
+  INCOME
+  EXPENSE
+}
+
+enum ReimbursementStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  PAID
+}
+
+enum FundraisingCampaignStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum ContributionType {
+  DONATION
+  SPONSORSHIP
+}
+
+enum ReconciliationStatus {
+  OPEN
+  RECONCILED
+}
+
 // Models
 model User {
-  id                  String      @id @default(cuid())
-  email               String      @unique
-  name                String
-  passwordHash        String?
-  role                UserRole @default(MEMBER)
-  isActive            Boolean     @default(true)
-  failedLogins        Int         @default(0)
-  lockedUntil         DateTime?
-  consentAcceptedAt   DateTime?
+  id                String    @id @default(cuid())
+  email             String    @unique
+  name              String
+  passwordHash      String?
+  role              UserRole  @default(MEMBER)
+  isActive          Boolean   @default(true)
+  failedLogins      Int       @default(0)
+  lockedUntil       DateTime?
+  consentAcceptedAt DateTime?
 
   // Relationships
-  member              Member?    @relation("userToMember")
-  createdRehearsals   Rehearsal[] @relation("createdBy")
-  reviewedAttendances  Attendance[] @relation("reviewedBy")
-  createdFeeSettings   FeeSetting[] @relation("createdBy")
-  createdPayments      Payment[]    @relation("recordedBy")
-  auditLogs           AuditLog[]   @relation("actor")
-  invites             Invite[]     @relation("userInvites")
+  member                  Member?             @relation("userToMember")
+  createdRehearsals       Rehearsal[]         @relation("createdBy")
+  reviewedAttendances     Attendance[]        @relation("reviewedBy")
+  createdFeeSettings      FeeSetting[]        @relation("createdBy")
+  createdPayments         Payment[]           @relation("recordedBy")
+  auditLogs               AuditLog[]          @relation("actor")
+  invites                 Invite[]            @relation("userInvites")
+  createdMeetings         Meeting[]           @relation("meetingCreator")
+  approvedMinutes         Meeting[]           @relation("minutesApprover")
+  decidedMotions          Motion[]            @relation("motionDecisionMaker")
+  createdActionItems      MeetingActionItem[] @relation("actionItemCreator")
+  createdElections        Election[]          @relation("electionCreator")
+  approvedElectionResults Election[]          @relation("electionResultsApprover")
+  reviewedNominations     Nomination[]        @relation("nominationReviewer")
+  createdProductions      Production[]        @relation("productionCreator")
+  createdScriptVersions   ScriptVersion[]     @relation("scriptVersionCreator")
+  createdProductionTasks  ProductionTask[]    @relation("productionTaskCreator")
+  createdShowDates        ShowDate[]          @relation("showDateCreator")
+  createdCallSheets       CallSheet[]         @relation("callSheetCreator")
+  updatedAssets           Asset[]             @relation("assetUpdater")
+  createdPostShowNotes    PostShowNote[]      @relation("postShowNoteCreator")
+  createdBudgets          Budget[]            @relation("budgetCreator")
+  createdFinanceEntries   FinanceEntry[]      @relation("financeEntryCreator")
+  approvedReimbursements  Reimbursement[]     @relation("reimbursementApprover")
+  paidReimbursements      Reimbursement[]     @relation("reimbursementPayer")
+  createdCampaigns        FundraisingCampaign[] @relation("campaignCreator")
+  recordedContributions   Contribution[]      @relation("contributionRecorder")
+  recordedTicketSales     TicketSale[]        @relation("ticketSaleRecorder")
+  recordedTicketRefunds   TicketRefund[]      @relation("ticketRefundRecorder")
+  createdGuestEntries     GuestListEntry[]    @relation("guestEntryCreator")
+  createdReconciliations  ReconciliationBatch[] @relation("reconciliationCreator")
 
   @@index([name])
 }
 
 model Member {
-  id                  String      @id @default(cuid())
-  userId              String?     @unique
-  fullName            String
-  phone               String      @unique
-  email               String      @unique
-  studentRegNo        String?
-  emergencyContactName String
+  id                    String       @id @default(cuid())
+  userId                String?      @unique
+  fullName              String
+  phone                 String       @unique
+  email                 String       @unique
+  studentRegNo          String?
+  emergencyContactName  String
   emergencyContactPhone String
-  status              MemberStatus @default(PENDING_REGISTRATION)
-  joinedAt            DateTime
-  notes               String?
-  createdAt           DateTime    @default(now())
+  status                MemberStatus @default(PENDING_REGISTRATION)
+  joinedAt              DateTime
+  notes                 String?
+  createdAt             DateTime     @default(now())
 
   // Relationships
-  user                User?       @relation("userToMember", fields: [userId], references: [id])
-  rehearsals          Attendance[] @relation("attendancesMember")
-  payments            Payment[]   @relation("paymentsMember")
-  statusHistory       MemberStatusHistory[]
+  user                 User?                 @relation("userToMember", fields: [userId], references: [id])
+  rehearsals           Attendance[]          @relation("attendancesMember")
+  payments             Payment[]             @relation("paymentsMember")
+  statusHistory        MemberStatusHistory[]
+  seasonMemberships    SeasonMembership[]
+  meetingAttendances   MeetingAttendance[]
+  assignedActionItems  MeetingActionItem[]   @relation("actionItemOwner")
+  nominations          Nomination[]
+  eligibleVotes        EligibleVoter[]
+  voteReceipts         VoteReceipt[]
+  productionCastings   Casting[]
+  crewAssignments      CrewAssignment[]
+  ownedProductionTasks ProductionTask[]      @relation("productionTaskOwner")
+  checkedOutAssets     Asset[]               @relation("assetHolder")
+  callSheetEntries     CallSheetMember[]
+  reimbursements      Reimbursement[]         @relation("reimbursementRequester")
 
   @@index([status, fullName, id])
   @@index([fullName, id])
@@ -128,68 +290,71 @@ model Member {
 }
 
 model MemberStatusHistory {
-  id         String       @id @default(cuid())
-  memberId   String
-  status     MemberStatus
+  id          String       @id @default(cuid())
+  memberId    String
+  status      MemberStatus
   effectiveAt DateTime
-  recordedAt DateTime     @default(now())
+  recordedAt  DateTime     @default(now())
 
-  member     Member       @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
 
   @@index([memberId, effectiveAt, recordedAt, id])
   @@index([status, effectiveAt])
 }
 
 model Invite {
-  id          String    @id @default(cuid())
-  userId      String
-  tokenHash   String    @unique
-  expiresAt   DateTime
-  usedAt      DateTime?
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
 
   // Relationships
-  user        User       @relation("userInvites", fields: [userId], references: [id])
+  user User @relation("userInvites", fields: [userId], references: [id])
 
   @@index([userId, usedAt])
 }
 
 model Rehearsal {
-  id            String         @id @default(cuid())
-  title         String
-  date          DateTime
-  startTime     String
-  endTime       String
-  venue         String
-  status        RehearsalStatus @default(SCHEDULED)
-  checkInCode   String?
-  createdById   String
+  id           String          @id @default(cuid())
+  title        String
+  date         DateTime
+  startTime    String
+  endTime      String
+  venue        String
+  status       RehearsalStatus @default(SCHEDULED)
+  checkInCode  String?
+  createdById  String
+  productionId String?
 
   // Relationships
-  createdBy     User            @relation("createdBy", fields: [createdById], references: [id])
-  attendances   Attendance[]    @relation("rehearsalAttendances")
+  createdBy   User         @relation("createdBy", fields: [createdById], references: [id])
+  attendances Attendance[] @relation("rehearsalAttendances")
+  production  Production?  @relation(fields: [productionId], references: [id], onDelete: Restrict)
 
   @@index([date, id])
   @@index([status, date, id])
+  @@index([productionId, date])
 }
 
 model Attendance {
-  id              String        @id @default(cuid())
-  rehearsalId     String
-  memberId        String
-  status          AttendanceStatus @default(NO_RESPONSE)
-  markedBy        MarkedBy      @default(SELF)
-  markedAt        DateTime      @default(now())
-  reason          String?
-  reviewStatus    ReviewStatus   @default(NONE)
-  reviewNote      String?
-  reviewedById    String?
-  reviewedAt      DateTime?
-  wrongCodeTries  Int           @default(0)
+  id             String           @id @default(cuid())
+  rehearsalId    String
+  memberId       String
+  status         AttendanceStatus @default(NO_RESPONSE)
+  markedBy       MarkedBy         @default(SELF)
+  markedAt       DateTime         @default(now())
+  reason         String?
+  reviewStatus   ReviewStatus     @default(NONE)
+  reviewNote     String?
+  reviewedById   String?
+  reviewedAt     DateTime?
+  wrongCodeTries Int              @default(0)
 
   // Relationships
-  rehearsal       Rehearsal      @relation("rehearsalAttendances", fields: [rehearsalId], references: [id])
-  member          Member         @relation("attendancesMember", fields: [memberId], references: [id])
-  reviewedBy      User?          @relation("reviewedBy", fields: [reviewedById], references: [id])
+  rehearsal  Rehearsal @relation("rehearsalAttendances", fields: [rehearsalId], references: [id])
+  member     Member    @relation("attendancesMember", fields: [memberId], references: [id])
+  reviewedBy User?     @relation("reviewedBy", fields: [reviewedById], references: [id])
 
   @@unique([rehearsalId, memberId])
   @@index([memberId, rehearsalId])
@@ -197,62 +362,199 @@ model Attendance {
 }
 
 model FeeSetting {
-  id              String      @id @default(cuid())
-  type            FeeType
-  amount          Int          // KES in whole shillings
-  billingPeriod   BillingPeriod?
-  effectiveFrom   DateTime
-  reason          String
-  createdById     String
+  id            String         @id @default(cuid())
+  type          FeeType
+  amount        Int // KES in whole shillings
+  billingPeriod BillingPeriod?
+  effectiveFrom DateTime
+  reason        String
+  createdById   String
 
   // Relationships
-  createdBy       User         @relation("createdBy", fields: [createdById], references: [id])
+  createdBy User @relation("createdBy", fields: [createdById], references: [id])
 
   @@index([type, effectiveFrom])
 }
 
 model Payment {
-  id                    String        @id @default(cuid())
-  memberId             String
-  type                 PaymentType
-  amount               Int            // KES in whole shillings
-  status               PaymentStatus @default(PENDING)
-  method               PaymentMethod
-  phone                String?
-  checkoutRequestId    String?       @unique
-  mpesaReceipt         String?       @unique
-  reference            String?
-  periodStart          DateTime?
-  periodEnd            DateTime?
-  resultDesc          String?
-  recordedById        String
-  createdAt            DateTime      @default(now())
-  paidAt               DateTime?
+  id                String        @id @default(cuid())
+  memberId          String
+  seasonId          String?
+  type              PaymentType
+  amount            Int // KES in whole shillings
+  status            PaymentStatus @default(PENDING)
+  method            PaymentMethod
+  phone             String?
+  checkoutRequestId String?       @unique
+  mpesaReceipt      String?       @unique
+  reference         String?
+  periodStart       DateTime?
+  periodEnd         DateTime?
+  resultDesc        String?
+  recordedById      String
+  createdAt         DateTime      @default(now())
+  paidAt            DateTime?
 
   // Relationships
-  member               Member        @relation("paymentsMember", fields: [memberId], references: [id])
-  recordedBy           User          @relation("recordedBy", fields: [recordedById], references: [id])
+  member     Member  @relation("paymentsMember", fields: [memberId], references: [id])
+  season     Season? @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  recordedBy User    @relation("recordedBy", fields: [recordedById], references: [id])
+  reconciliationEntry ReconciliationEntry?
 
   @@index([memberId, type, createdAt, id])
   @@index([type, status, memberId, paidAt(sort: Desc), id(sort: Desc)])
+  @@index([seasonId, status, type, paidAt])
+}
+
+model Season {
+  id                     String             @id @default(cuid())
+  name                   String
+  startDate              DateTime           @db.Timestamp(3)
+  endDate                DateTime           @db.Timestamp(3)
+  isCurrent              Boolean            @default(false)
+  membershipSnapshotHash String?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  memberships            SeasonMembership[]
+  payments               Payment[]
+  productions            Production[]
+  budgets                Budget[]
+  financeEntries         FinanceEntry[]
+  reimbursements         Reimbursement[]
+  campaigns              FundraisingCampaign[]
+  contributions          Contribution[]
+
+  @@index([startDate, endDate])
+}
+
+model SeasonMembership {
+  id           String                 @id @default(cuid())
+  seasonId     String
+  memberId     String
+  status       SeasonMembershipStatus
+  feesOwed     Int                    @default(0)
+  feesPaid     Int                    @default(0)
+  roleInSeason String                 @default("MEMBER")
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+  season       Season                 @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  member       Member                 @relation(fields: [memberId], references: [id], onDelete: Restrict)
+
+  @@unique([seasonId, memberId])
+  @@index([seasonId, status, memberId])
+  @@index([memberId, seasonId])
+}
+
+model Meeting {
+  id                  String              @id @default(cuid())
+  title               String
+  startsAt            DateTime            @db.Timestamp(3)
+  venue               String
+  status              MeetingStatus       @default(DRAFT)
+  quorumPercent       Int                 @default(50)
+  quorumEligibleCount Int                 @default(0)
+  minutes             String?
+  minutesStatus       MinutesStatus       @default(DRAFT)
+  minutesApprovedAt   DateTime?
+  minutesApprovedById String?
+  createdById         String
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  createdBy           User                @relation("meetingCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  minutesApprovedBy   User?               @relation("minutesApprover", fields: [minutesApprovedById], references: [id], onDelete: Restrict)
+  agendaItems         MeetingAgendaItem[]
+  attendances         MeetingAttendance[]
+  motions             Motion[]
+  actionItems         MeetingActionItem[]
+
+  @@index([status, startsAt, id])
+  @@index([minutesStatus, startsAt, id])
+  @@index([createdById])
+  @@index([minutesApprovedById])
+}
+
+model MeetingAgendaItem {
+  id          String   @id @default(cuid())
+  meetingId   String
+  title       String
+  description String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  meeting     Meeting  @relation(fields: [meetingId], references: [id], onDelete: Restrict)
+
+  @@index([meetingId, sortOrder, id])
+}
+
+model MeetingAttendance {
+  id        String   @id @default(cuid())
+  meetingId String
+  memberId  String
+  attended  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  meeting   Meeting  @relation(fields: [meetingId], references: [id], onDelete: Restrict)
+  member    Member   @relation(fields: [memberId], references: [id], onDelete: Restrict)
+
+  @@unique([meetingId, memberId])
+  @@index([meetingId, attended, memberId])
+  @@index([memberId, meetingId])
+}
+
+model Motion {
+  id           String       @id @default(cuid())
+  meetingId    String
+  title        String
+  description  String?
+  status       MotionStatus @default(PENDING)
+  decisionNote String?
+  decidedAt    DateTime?
+  decidedById  String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  meeting      Meeting      @relation(fields: [meetingId], references: [id], onDelete: Restrict)
+  decidedBy    User?        @relation("motionDecisionMaker", fields: [decidedById], references: [id], onDelete: Restrict)
+
+  @@index([meetingId, status, createdAt])
+  @@index([decidedById])
+}
+
+model MeetingActionItem {
+  id            String           @id @default(cuid())
+  meetingId     String
+  title         String
+  description   String?
+  ownerMemberId String
+  dueAt         DateTime?
+  status        ActionItemStatus @default(OPEN)
+  createdById   String
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  meeting       Meeting          @relation(fields: [meetingId], references: [id], onDelete: Restrict)
+  owner         Member           @relation("actionItemOwner", fields: [ownerMemberId], references: [id], onDelete: Restrict)
+  createdBy     User             @relation("actionItemCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([meetingId, status, dueAt])
+  @@index([ownerMemberId, status, dueAt])
+  @@index([createdById])
 }
 
 model Setting {
-  key      String   @id
-  value    Json
+  key   String @id
+  value Json
 }
 
 model AuditLog {
-  id          String   @id @default(cuid())
-  actorId     String
-  action      String
-  entity      String
-  entityId    String
-  details     Json
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  actorId   String
+  action    String
+  entity    String
+  entityId  String
+  details   Json
+  createdAt DateTime @default(now())
 
   // Relationships
-  actor       User     @relation("actor", fields: [actorId], references: [id])
+  actor User @relation("actor", fields: [actorId], references: [id])
 
   @@index([actorId, createdAt])
   @@index([action])
@@ -267,4 +569,559 @@ model RateLimitBucket {
   windowEndsAt DateTime
 
   @@index([windowEndsAt])
+}
+
+model Election {
+  id                      String          @id @default(cuid())
+  title                   String
+  description             String?
+  status                  ElectionStatus  @default(DRAFT)
+  requireActiveMember     Boolean         @default(true)
+  requireFeesCurrent      Boolean         @default(false)
+  eligibleVoterCount      Int             @default(0)
+  eligibilitySnapshotHash String?
+  nominationsOpenedAt     DateTime?
+  votingOpenedAt          DateTime?
+  closedAt                DateTime?
+  resultsPublishedAt      DateTime?
+  resultsApprovedById     String?
+  resultsApprovedAt       DateTime?
+  createdById             String
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+  createdBy               User            @relation("electionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  resultsApprovedBy       User?           @relation("electionResultsApprover", fields: [resultsApprovedById], references: [id], onDelete: Restrict)
+  offices                 Office[]
+  nominations             Nomination[]
+  eligibleVoters          EligibleVoter[]
+  ballots                 Ballot[]
+  voteReceipts            VoteReceipt[]
+
+  @@index([status, createdAt(sort: Desc), id])
+  @@index([createdById])
+  @@index([resultsApprovedById])
+}
+
+model Office {
+  id           String          @id @default(cuid())
+  electionId   String
+  title        String
+  description  String?
+  sortOrder    Int             @default(0)
+  tieRule      ElectionTieRule @default(NO_WINNER)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  election     Election        @relation(fields: [electionId], references: [id], onDelete: Restrict)
+  nominations  Nomination[]
+  choices      BallotChoice[]
+  voteReceipts VoteReceipt[]
+
+  @@unique([electionId, title])
+  @@index([electionId, sortOrder, id])
+}
+
+model Nomination {
+  id            String           @id @default(cuid())
+  electionId    String
+  officeId      String
+  memberId      String
+  status        NominationStatus @default(PENDING)
+  reviewedById  String?
+  reviewedAt    DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  election      Election         @relation(fields: [electionId], references: [id], onDelete: Restrict)
+  office        Office           @relation(fields: [officeId], references: [id], onDelete: Restrict)
+  member        Member           @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  reviewedBy    User?            @relation("nominationReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+  ballotChoices BallotChoice[]
+
+  @@unique([officeId, memberId])
+  @@index([electionId, status, createdAt])
+  @@index([memberId, electionId])
+  @@index([reviewedById])
+}
+
+model EligibleVoter {
+  id         String   @id @default(cuid())
+  electionId String
+  memberId   String
+  frozenAt   DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  election   Election @relation(fields: [electionId], references: [id], onDelete: Restrict)
+  member     Member   @relation(fields: [memberId], references: [id], onDelete: Restrict)
+
+  @@unique([electionId, memberId])
+  @@index([memberId, electionId])
+}
+
+model Ballot {
+  id          String         @id @default(cuid())
+  electionId  String
+  submittedAt DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  election    Election       @relation(fields: [electionId], references: [id], onDelete: Restrict)
+  choices     BallotChoice[]
+
+  @@index([electionId, submittedAt])
+}
+
+model BallotChoice {
+  id           String           @id @default(cuid())
+  ballotId     String
+  officeId     String
+  choiceType   BallotChoiceType
+  nominationId String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  ballot       Ballot           @relation(fields: [ballotId], references: [id], onDelete: Restrict)
+  office       Office           @relation(fields: [officeId], references: [id], onDelete: Restrict)
+  nomination   Nomination?      @relation(fields: [nominationId], references: [id], onDelete: Restrict)
+
+  @@unique([ballotId, officeId])
+  @@index([officeId, choiceType, nominationId])
+}
+
+model VoteReceipt {
+  id         String   @id @default(cuid())
+  electionId String
+  memberId   String
+  officeId   String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  election   Election @relation(fields: [electionId], references: [id], onDelete: Restrict)
+  member     Member   @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  office     Office   @relation(fields: [officeId], references: [id], onDelete: Restrict)
+
+  @@unique([electionId, memberId, officeId])
+  @@index([electionId, memberId])
+  @@index([officeId, memberId])
+}
+
+model Production {
+  id             String           @id @default(cuid())
+  title          String
+  description    String?
+  status         ProductionStatus @default(PLANNING)
+  startDate      DateTime?        @db.Timestamp(3)
+  endDate        DateTime?        @db.Timestamp(3)
+  seasonId       String?
+  createdById    String
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  season         Season?          @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  createdBy      User             @relation("productionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  scriptVersions ScriptVersion[]
+  roles          ProductionRole[]
+  crew           CrewAssignment[]
+  tasks          ProductionTask[]
+  rehearsals     Rehearsal[]
+  showDates      ShowDate[]
+  assets         Asset[]
+  postShowNotes  PostShowNote[]
+  budgets        Budget[]
+  financeEntries FinanceEntry[]
+  reimbursements Reimbursement[]
+  campaigns      FundraisingCampaign[]
+  contributions  Contribution[]
+
+  @@index([status, startDate, id])
+  @@index([seasonId, status])
+  @@index([createdById])
+}
+
+model ScriptVersion {
+  id               String     @id @default(cuid())
+  productionId     String
+  version          String
+  usageRightsNotes String
+  storageReference String?
+  createdById      String
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  production       Production @relation(fields: [productionId], references: [id], onDelete: Restrict)
+  createdBy        User       @relation("scriptVersionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@unique([productionId, version])
+  @@index([productionId, createdAt])
+  @@index([createdById])
+}
+
+model ProductionRole {
+  id           String     @id @default(cuid())
+  productionId String
+  name         String
+  description  String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  production   Production @relation(fields: [productionId], references: [id], onDelete: Restrict)
+  castings     Casting[]
+
+  @@unique([productionId, name])
+  @@index([productionId, createdAt])
+}
+
+model Casting {
+  id        String         @id @default(cuid())
+  roleId    String
+  memberId  String
+  type      CastingType    @default(CAST)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  role      ProductionRole @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  member    Member         @relation(fields: [memberId], references: [id], onDelete: Restrict)
+
+  @@unique([roleId, memberId])
+  @@index([memberId, roleId])
+}
+
+model CrewAssignment {
+  id           String     @id @default(cuid())
+  productionId String
+  memberId     String
+  assignment   String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  production   Production @relation(fields: [productionId], references: [id], onDelete: Restrict)
+  member       Member     @relation(fields: [memberId], references: [id], onDelete: Restrict)
+
+  @@unique([productionId, memberId, assignment])
+  @@index([memberId, productionId])
+  @@index([productionId, assignment])
+}
+
+model ProductionTask {
+  id            String               @id @default(cuid())
+  productionId  String
+  title         String
+  description   String?
+  ownerMemberId String?
+  deadline      DateTime?            @db.Timestamp(3)
+  status        ProductionTaskStatus @default(OPEN)
+  createdById   String
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  production    Production           @relation(fields: [productionId], references: [id], onDelete: Restrict)
+  owner         Member?              @relation("productionTaskOwner", fields: [ownerMemberId], references: [id], onDelete: Restrict)
+  createdBy     User                 @relation("productionTaskCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([productionId, status, deadline])
+  @@index([ownerMemberId, status, deadline])
+  @@index([createdById])
+}
+
+model ShowDate {
+  id            String         @id @default(cuid())
+  productionId  String
+  startsAt      DateTime       @db.Timestamp(3)
+  venue         String
+  createdById   String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  production    Production     @relation(fields: [productionId], references: [id], onDelete: Restrict)
+  createdBy     User           @relation("showDateCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  callSheets    CallSheet[]
+  postShowNotes PostShowNote[]
+  ticketTypes   TicketType[]
+  guestList     GuestListEntry[]
+
+  @@index([productionId, startsAt])
+  @@index([createdById])
+}
+
+model CallSheet {
+  id          String            @id @default(cuid())
+  showDateId  String
+  title       String
+  callAt      DateTime          @db.Timestamp(3)
+  notes       String?
+  createdById String
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  showDate    ShowDate          @relation(fields: [showDateId], references: [id], onDelete: Restrict)
+  createdBy   User              @relation("callSheetCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  members     CallSheetMember[]
+
+  @@index([showDateId, callAt])
+  @@index([createdById])
+}
+
+model CallSheetMember {
+  id          String    @id @default(cuid())
+  callSheetId String
+  memberId    String
+  note        String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  callSheet   CallSheet @relation(fields: [callSheetId], references: [id], onDelete: Restrict)
+  member      Member    @relation(fields: [memberId], references: [id], onDelete: Restrict)
+
+  @@unique([callSheetId, memberId])
+  @@index([memberId, callSheetId])
+}
+
+model Asset {
+  id                    String         @id @default(cuid())
+  productionId          String?
+  name                  String
+  category              AssetCategory
+  condition             AssetCondition @default(GOOD)
+  status                AssetStatus    @default(AVAILABLE)
+  currentHolderMemberId String?
+  updatedById           String
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  production            Production?    @relation(fields: [productionId], references: [id], onDelete: Restrict)
+  currentHolder         Member?        @relation("assetHolder", fields: [currentHolderMemberId], references: [id], onDelete: Restrict)
+  updatedBy             User           @relation("assetUpdater", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@index([productionId, category, status])
+  @@index([currentHolderMemberId, status])
+  @@index([updatedById])
+}
+
+model PostShowNote {
+  id           String     @id @default(cuid())
+  productionId String
+  showDateId   String?
+  note         String
+  createdById  String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  production   Production @relation(fields: [productionId], references: [id], onDelete: Restrict)
+  showDate     ShowDate?  @relation(fields: [showDateId], references: [id], onDelete: Restrict)
+  createdBy    User       @relation("postShowNoteCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([productionId, createdAt])
+  @@index([showDateId])
+}
+
+model Budget {
+  id           String     @id @default(cuid())
+  seasonId     String?
+  productionId String?
+  category     String
+  amount       Int
+  notes        String?
+  createdById  String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  season       Season?    @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  production   Production? @relation(fields: [productionId], references: [id], onDelete: Restrict)
+  createdBy    User       @relation("budgetCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([seasonId, category])
+  @@index([productionId, category])
+  @@index([createdById])
+}
+
+model FinanceEntry {
+  id                 String          @id @default(cuid())
+  type               FinanceEntryType
+  category           String
+  amount             Int
+  description        String
+  receiptReference   String?
+  occurredAt         DateTime        @db.Timestamp(3)
+  seasonId           String?
+  productionId       String?
+  recordedById       String
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  season             Season?         @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  production         Production?     @relation(fields: [productionId], references: [id], onDelete: Restrict)
+  recordedBy         User            @relation("financeEntryCreator", fields: [recordedById], references: [id], onDelete: Restrict)
+
+  @@index([type, occurredAt])
+  @@index([seasonId, type, occurredAt])
+  @@index([productionId, type, occurredAt])
+  @@index([recordedById])
+}
+
+model Reimbursement {
+  id                   String              @id @default(cuid())
+  requestedByMemberId  String
+  amount               Int
+  reason               String
+  receiptReference     String?
+  status               ReimbursementStatus @default(REQUESTED)
+  approvedById         String?
+  decidedAt            DateTime?
+  paidById             String?
+  paidAt               DateTime?
+  paymentReference     String?
+  seasonId             String?
+  productionId         String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  requestedBy          Member              @relation("reimbursementRequester", fields: [requestedByMemberId], references: [id], onDelete: Restrict)
+  approvedBy           User?               @relation("reimbursementApprover", fields: [approvedById], references: [id], onDelete: Restrict)
+  paidBy               User?               @relation("reimbursementPayer", fields: [paidById], references: [id], onDelete: Restrict)
+  season               Season?             @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  production           Production?          @relation(fields: [productionId], references: [id], onDelete: Restrict)
+
+  @@index([status, createdAt])
+  @@index([requestedByMemberId, status])
+  @@index([seasonId, status])
+  @@index([productionId, status])
+  @@index([approvedById])
+  @@index([paidById])
+}
+
+model FundraisingCampaign {
+  id           String                   @id @default(cuid())
+  title        String
+  description  String?
+  goalAmount   Int
+  status       FundraisingCampaignStatus @default(ACTIVE)
+  seasonId     String?
+  productionId String?
+  createdById  String
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+  season       Season?                  @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  production   Production?              @relation(fields: [productionId], references: [id], onDelete: Restrict)
+  createdBy    User                     @relation("campaignCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  contributions Contribution[]
+
+  @@index([status, createdAt])
+  @@index([seasonId, status])
+  @@index([productionId, status])
+  @@index([createdById])
+}
+
+model Contribution {
+  id           String          @id @default(cuid())
+  campaignId   String?
+  type         ContributionType
+  contributor  String?
+  amount       Int
+  method       PaymentMethod
+  reference    String?
+  receivedAt   DateTime        @db.Timestamp(3)
+  seasonId     String?
+  productionId String?
+  recordedById String
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  campaign     FundraisingCampaign? @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  season       Season?         @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  production   Production?     @relation(fields: [productionId], references: [id], onDelete: Restrict)
+  recordedBy   User            @relation("contributionRecorder", fields: [recordedById], references: [id], onDelete: Restrict)
+
+  @@index([type, receivedAt])
+  @@index([campaignId, receivedAt])
+  @@index([seasonId, receivedAt])
+  @@index([productionId, receivedAt])
+  @@index([recordedById])
+}
+
+model TicketType {
+  id               String     @id @default(cuid())
+  showDateId       String
+  name             String
+  price            Int
+  quantityAvailable Int?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  showDate         ShowDate   @relation(fields: [showDateId], references: [id], onDelete: Restrict)
+  sales            TicketSale[]
+
+  @@unique([showDateId, name])
+  @@index([showDateId, createdAt])
+}
+
+model TicketSale {
+  id           String       @id @default(cuid())
+  ticketTypeId String
+  quantity     Int
+  unitPrice    Int
+  totalAmount  Int
+  buyerName    String?
+  method       PaymentMethod
+  reference    String?
+  soldAt       DateTime     @default(now())
+  recordedById String
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  ticketType   TicketType   @relation(fields: [ticketTypeId], references: [id], onDelete: Restrict)
+  recordedBy   User         @relation("ticketSaleRecorder", fields: [recordedById], references: [id], onDelete: Restrict)
+  refunds      TicketRefund[]
+  guestEntries GuestListEntry[]
+  reconciliationEntry ReconciliationEntry?
+
+  @@index([ticketTypeId, soldAt])
+  @@index([method, soldAt])
+  @@index([recordedById])
+}
+
+model TicketRefund {
+  id           String     @id @default(cuid())
+  ticketSaleId String
+  amount       Int
+  reason       String
+  refundedAt   DateTime   @default(now())
+  recordedById String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  ticketSale   TicketSale @relation(fields: [ticketSaleId], references: [id], onDelete: Restrict)
+  recordedBy   User       @relation("ticketRefundRecorder", fields: [recordedById], references: [id], onDelete: Restrict)
+
+  @@index([ticketSaleId, refundedAt])
+}
+
+model GuestListEntry {
+  id           String     @id @default(cuid())
+  showDateId   String
+  ticketSaleId String?
+  name         String
+  note         String?
+  checkedInAt  DateTime?
+  addedById    String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  showDate     ShowDate   @relation(fields: [showDateId], references: [id], onDelete: Restrict)
+  ticketSale   TicketSale? @relation(fields: [ticketSaleId], references: [id], onDelete: Restrict)
+  addedBy      User       @relation("guestEntryCreator", fields: [addedById], references: [id], onDelete: Restrict)
+
+  @@index([showDateId, checkedInAt])
+  @@index([ticketSaleId])
+  @@index([addedById])
+}
+
+model ReconciliationBatch {
+  id            String               @id @default(cuid())
+  method        PaymentMethod
+  statementDate DateTime             @db.Timestamp(3)
+  reference     String
+  status        ReconciliationStatus @default(OPEN)
+  createdById   String
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  createdBy     User                 @relation("reconciliationCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  entries       ReconciliationEntry[]
+
+  @@unique([method, reference])
+  @@index([status, statementDate])
+  @@index([createdById])
+}
+
+model ReconciliationEntry {
+  id               String              @id @default(cuid())
+  batchId          String
+  statementReference String
+  amount           Int
+  paymentId        String?             @unique
+  ticketSaleId     String?             @unique
+  notes            String?
+  matchedAt        DateTime?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  batch            ReconciliationBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  payment          Payment?            @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  ticketSale       TicketSale?         @relation(fields: [ticketSaleId], references: [id], onDelete: Restrict)
+
+  @@unique([batchId, statementReference])
+  @@index([batchId, paymentId])
 }

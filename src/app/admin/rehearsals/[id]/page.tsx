@@ -1,7 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { pageUser } from '@/lib/page-access'
-import { prisma } from '@/lib/db'
 import { userIdSchema } from '@/lib/validation'
 import { formatNairobiDate } from '@/lib/dates'
 import { AttendanceSheet } from '@/components/rehearsals/attendance-sheet'
@@ -9,6 +8,7 @@ import { EditRehearsalForm } from '@/components/rehearsals/edit-form'
 import { SessionControls } from '@/components/rehearsals/session-controls'
 import { CancelRehearsalForm } from '@/components/rehearsals/cancel-form'
 import { z } from 'zod'
+import { adminReadService } from '@/modules/admin/read-service'
 
 const pageSchema = z.coerce.number().int().min(1).max(10000).catch(1)
 const PAGE_SIZE = 20
@@ -17,25 +17,13 @@ export default async function RehearsalDetailPage({ params, searchParams }: { pa
   await pageUser('COMMITTEE')
   const parsed = userIdSchema.safeParse((await params).id)
   if (!parsed.success) notFound()
-  const rehearsal = await prisma.rehearsal.findUnique({
-    where: { id: parsed.data },
-    select: { id: true, title: true, date: true, startTime: true, endTime: true, venue: true, status: true, checkInCode: true, createdBy: { select: { name: true } } },
-  })
+  const rehearsal = await adminReadService.rehearsal(parsed.data)
   if (!rehearsal) notFound()
   const requestedPage = pageSchema.parse((await searchParams).page ?? '1')
-  const totalActive = await prisma.member.count({ where: { status: 'ACTIVE' } })
+  const totalActive = await adminReadService.activeMemberCount()
   const pageCount = Math.max(1, Math.ceil(totalActive / PAGE_SIZE))
   const page = Math.min(requestedPage, pageCount)
-  const members = await prisma.member.findMany({
-    where: { status: 'ACTIVE' },
-    select: {
-      id: true, fullName: true, phone: true, joinedAt: true,
-      rehearsals: { where: { rehearsalId: rehearsal.id }, select: { id: true, status: true, markedBy: true, reason: true, reviewStatus: true } },
-    },
-    orderBy: { fullName: 'asc' },
-    skip: (page - 1) * PAGE_SIZE,
-    take: PAGE_SIZE,
-  })
+  const members = await adminReadService.activeMembersForRehearsal(rehearsal.id, page, PAGE_SIZE)
   return <div className="space-y-6">
     <div>
       <Link className="inline-flex min-h-11 items-center underline" href="/admin/rehearsals">← Rehearsals</Link>

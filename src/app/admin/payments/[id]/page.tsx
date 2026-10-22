@@ -1,18 +1,15 @@
 import Link from 'next/link'
-import { prisma } from '@/lib/db'
 import { formatNairobiDate } from '@/lib/dates'
 import { pageUser } from '@/lib/page-access'
 import { formatKES } from '@/lib/money'
 import { PrintButton } from '@/components/print-button'
 import { notFound } from 'next/navigation'
+import { adminReadService } from '@/modules/admin/read-service'
 
 export default async function PaymentReceiptPage({ params }: { params: Promise<{ id: string }> }) {
   await pageUser('COMMITTEE')
   const { id } = await params
-  const payment = await prisma.payment.findUnique({
-    where: { id },
-    include: { member: { select: { fullName: true, email: true } } },
-  })
+  const payment = await adminReadService.paymentReceipt(id)
 
   if (!payment) {
     return <section className="card"><h1>Receipt not found</h1><Link className="btn-primary" href="/admin/payments">Back to payments</Link></section>

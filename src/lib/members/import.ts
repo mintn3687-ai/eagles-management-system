@@ -6,6 +6,7 @@ import { requireRole } from '../permissions'
 import { previewCsv } from './csv'
 import { MemberError } from './errors'
 import { z } from 'zod'
+import { addMembersToCurrentSeason } from '@/modules/seasons/service'
 
 const sourceSchema = z.string().min(1).max(512000)
 export async function previewMemberImport(source: unknown, tx: Prisma.TransactionClient = prisma) {
@@ -41,6 +42,10 @@ export async function importMembers(source: unknown) {
       ...values, userId: userIds.get(values.email)!, status: 'PENDING_REGISTRATION' as const,
       emergencyContactName: '', emergencyContactPhone: '', joinedAt: importedAt,
     })), select: { id: true } })
+    await addMembersToCurrentSeason(tx, members.map((member) => ({
+      memberId: member.id,
+      status: 'PENDING_REGISTRATION',
+    })))
     if (members.length) {
       await tx.$executeRaw(Prisma.sql`
         INSERT INTO "MemberStatusHistory" ("id", "memberId", "status", "effectiveAt")

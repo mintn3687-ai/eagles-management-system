@@ -1,11 +1,11 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { pageUser } from '@/lib/page-access'
-import { prisma } from '@/lib/db'
 import { getCurrentFee, getMemberSubscriptionStatus, resolveMemberFeeType } from '@/lib/fees'
 import { formatKES } from '@/lib/money'
 import { formatNairobiDate } from '@/lib/dates'
 import { SignOut } from '@/components/sign-out'
+import { adminReadService } from '@/modules/admin/read-service'
 
 const statusStyle = {
   PAID: 'border-emerald-200 bg-emerald-50 text-emerald-900',
@@ -34,11 +34,7 @@ export default async function MemberFeesPage() {
 
   const [status, latest] = await Promise.all([
     getMemberSubscriptionStatus(user.member.id),
-    prisma.payment.findFirst({
-      where: { memberId: user.member.id, type: 'SUBSCRIPTION', status: 'SUCCESS' },
-      orderBy: [{ paidAt: { sort: 'desc', nulls: 'last' } }, { id: 'desc' }],
-      select: { periodStart: true, periodEnd: true },
-    }),
+    adminReadService.memberSubscriptionPayment(user.member.id),
   ])
 
   return <section className="card space-y-5 border-l-4 border-amber-500">
