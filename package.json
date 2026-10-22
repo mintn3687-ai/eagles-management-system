@@ -1,0 +1,46 @@
+{
+  "name": "eagles-drama-club-register",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "typecheck": "prisma generate && tsc --noEmit",
+    "test": "vitest run && tsx --test tests/helpers.test.ts",
+    "test:watch": "vitest",
+    "test:integration": "tsx tests/integration.ts",
+    "test:isolated": "node scripts/test-isolated.mjs",
+    "db:bootstrap": "tsx scripts/bootstrap-admin.ts",
+    "db:generate": "prisma generate",
+    "db:migrate": "node scripts/prisma.mjs migrate deploy",
+    "db:migrate:dev": "node scripts/prisma.mjs migrate dev",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:status": "node scripts/prisma.mjs migrate status"
+  },
+  "dependencies": {
+    "@next/env": "^16.4.2",
+    "@prisma/client": "5.22.0",
+    "bcryptjs": "^2.4.3",
+    "next": "^16.4.2",
+    "next-auth": "^5.0.0-beta.32",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "server-only": "^0.0.1",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/bcryptjs": "^2.4.3",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "postcss": "^8.4.0",
+    "prisma": "5.22.0",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.4"
+  }
+}

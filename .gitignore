@@ -1,0 +1,14 @@
+node_modules
+.next
+.next-*/
+.next-integration
+dist
+.env.local
+.env.production
+.env.secret
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+test-results/
+playwright-report/

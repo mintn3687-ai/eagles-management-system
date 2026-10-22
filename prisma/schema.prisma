@@ -1,0 +1,270 @@
+generator client {
+  provider        = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+// Enums
+enum UserRole {
+  MEMBER
+  COMMITTEE
+  SUPER_ADMIN
+}
+
+enum MemberStatus {
+  PENDING_REGISTRATION
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  ALUMNI
+}
+
+enum RehearsalStatus {
+  SCHEDULED
+  OPEN
+  CLOSED
+  CANCELLED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  NO_RESPONSE
+}
+
+enum MarkedBy {
+  SELF
+  COMMITTEE
+}
+
+enum ReviewStatus {
+  NONE
+  PENDING
+  EXCUSED
+  UNEXCUSED
+}
+
+enum FeeType {
+  REGISTRATION
+  SUBSCRIPTION
+}
+
+enum BillingPeriod {
+  MONTHLY
+  TERM
+  YEAR
+}
+
+enum PaymentType {
+  REGISTRATION
+  SUBSCRIPTION
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  MPESA
+  CASH
+  OTHER
+}
+
+// Models
+model User {
+  id                  String      @id @default(cuid())
+  email               String      @unique
+  name                String
+  passwordHash        String?
+  role                UserRole @default(MEMBER)
+  isActive            Boolean     @default(true)
+  failedLogins        Int         @default(0)
+  lockedUntil         DateTime?
+  consentAcceptedAt   DateTime?
+
+  // Relationships
+  member              Member?    @relation("userToMember")
+  createdRehearsals   Rehearsal[] @relation("createdBy")
+  reviewedAttendances  Attendance[] @relation("reviewedBy")
+  createdFeeSettings   FeeSetting[] @relation("createdBy")
+  createdPayments      Payment[]    @relation("recordedBy")
+  auditLogs           AuditLog[]   @relation("actor")
+  invites             Invite[]     @relation("userInvites")
+
+  @@index([name])
+}
+
+model Member {
+  id                  String      @id @default(cuid())
+  userId              String?     @unique
+  fullName            String
+  phone               String      @unique
+  email               String      @unique
+  studentRegNo        String?
+  emergencyContactName String
+  emergencyContactPhone String
+  status              MemberStatus @default(PENDING_REGISTRATION)
+  joinedAt            DateTime
+  notes               String?
+  createdAt           DateTime    @default(now())
+
+  // Relationships
+  user                User?       @relation("userToMember", fields: [userId], references: [id])
+  rehearsals          Attendance[] @relation("attendancesMember")
+  payments            Payment[]   @relation("paymentsMember")
+  statusHistory       MemberStatusHistory[]
+
+  @@index([status, fullName, id])
+  @@index([fullName, id])
+  @@index([joinedAt, id])
+  @@index([status, joinedAt, id])
+}
+
+model MemberStatusHistory {
+  id         String       @id @default(cuid())
+  memberId   String
+  status     MemberStatus
+  effectiveAt DateTime
+  recordedAt DateTime     @default(now())
+
+  member     Member       @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([memberId, effectiveAt, recordedAt, id])
+  @@index([status, effectiveAt])
+}
+
+model Invite {
+  id          String    @id @default(cuid())
+  userId      String
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+
+  // Relationships
+  user        User       @relation("userInvites", fields: [userId], references: [id])
+
+  @@index([userId, usedAt])
+}
+
+model Rehearsal {
+  id            String         @id @default(cuid())
+  title         String
+  date          DateTime
+  startTime     String
+  endTime       String
+  venue         String
+  status        RehearsalStatus @default(SCHEDULED)
+  checkInCode   String?
+  createdById   String
+
+  // Relationships
+  createdBy     User            @relation("createdBy", fields: [createdById], references: [id])
+  attendances   Attendance[]    @relation("rehearsalAttendances")
+
+  @@index([date, id])
+  @@index([status, date, id])
+}
+
+model Attendance {
+  id              String        @id @default(cuid())
+  rehearsalId     String
+  memberId        String
+  status          AttendanceStatus @default(NO_RESPONSE)
+  markedBy        MarkedBy      @default(SELF)
+  markedAt        DateTime      @default(now())
+  reason          String?
+  reviewStatus    ReviewStatus   @default(NONE)
+  reviewNote      String?
+  reviewedById    String?
+  reviewedAt      DateTime?
+  wrongCodeTries  Int           @default(0)
+
+  // Relationships
+  rehearsal       Rehearsal      @relation("rehearsalAttendances", fields: [rehearsalId], references: [id])
+  member          Member         @relation("attendancesMember", fields: [memberId], references: [id])
+  reviewedBy      User?          @relation("reviewedBy", fields: [reviewedById], references: [id])
+
+  @@unique([rehearsalId, memberId])
+  @@index([memberId, rehearsalId])
+  @@index([reviewStatus, status, markedAt, id])
+}
+
+model FeeSetting {
+  id              String      @id @default(cuid())
+  type            FeeType
+  amount          Int          // KES in whole shillings
+  billingPeriod   BillingPeriod?
+  effectiveFrom   DateTime
+  reason          String
+  createdById     String
+
+  // Relationships
+  createdBy       User         @relation("createdBy", fields: [createdById], references: [id])
+
+  @@index([type, effectiveFrom])
+}
+
+model Payment {
+  id                    String        @id @default(cuid())
+  memberId             String
+  type                 PaymentType
+  amount               Int            // KES in whole shillings
+  status               PaymentStatus @default(PENDING)
+  method               PaymentMethod
+  phone                String?
+  checkoutRequestId    String?       @unique
+  mpesaReceipt         String?       @unique
+  reference            String?
+  periodStart          DateTime?
+  periodEnd            DateTime?
+  resultDesc          String?
+  recordedById        String
+  createdAt            DateTime      @default(now())
+  paidAt               DateTime?
+
+  // Relationships
+  member               Member        @relation("paymentsMember", fields: [memberId], references: [id])
+  recordedBy           User          @relation("recordedBy", fields: [recordedById], references: [id])
+
+  @@index([memberId, type, createdAt, id])
+  @@index([type, status, memberId, paidAt(sort: Desc), id(sort: Desc)])
+}
+
+model Setting {
+  key      String   @id
+  value    Json
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorId     String
+  action      String
+  entity      String
+  entityId    String
+  details     Json
+  createdAt   DateTime @default(now())
+
+  // Relationships
+  actor       User     @relation("actor", fields: [actorId], references: [id])
+
+  @@index([actorId, createdAt])
+  @@index([action])
+  @@index([entityId])
+  @@index([entity, entityId, createdAt])
+  @@index([createdAt(sort: Desc), id(sort: Desc)])
+}
+
+model RateLimitBucket {
+  key          String   @id
+  count        Int
+  windowEndsAt DateTime
+
+  @@index([windowEndsAt])
+}
