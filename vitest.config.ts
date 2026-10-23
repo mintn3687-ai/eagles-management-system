@@ -19,5 +19,6 @@ export default defineConfig({
     'tests/phase5-service.test.ts',
     'tests/push-reminder-window.test.ts',
     'tests/push-service.test.ts',
+    'tests/check-in-qr.test.ts',
   ] },
 })

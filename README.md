@@ -192,6 +192,16 @@ variables are optional and live payment processing remains disabled in this
 phase.
 
 Copy `.env.example` to `.env.local`, then set the local values described above. Use the Vercel project settings for production values; never paste real credentials into this document.
+
+### Rehearsal QR check-in
+
+When a committee member opens a rehearsal, the session page shows a QR code
+alongside the existing four-digit code. Members can scan it with their phone
+camera to open that rehearsal's attendance page with the code prefilled; they
+must still sign in and submit the check-in. Manual code entry remains available.
+The QR is a convenience for people who can see the admin screen, not a GPS
+boundary or anti-cheat guarantee; it can be photographed and shared.
+
 ## API Endpoints
 
 The application provides RESTful API endpoints for:
