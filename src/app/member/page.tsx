@@ -5,6 +5,7 @@ import { isRestricted } from '@/lib/permissions'
 import { getMemberDashboard } from '@/lib/rehearsals/service'
 import { formatNairobiDate } from '@/lib/dates'
 import { SignOut } from '@/components/sign-out'
+import { PushOptIn } from '@/components/push-opt-in'
 
 export default async function MemberPage() {
   const user = await pageUser()
@@ -42,6 +43,7 @@ export default async function MemberPage() {
     {isMember && user.member?.status === 'ACTIVE' && <Link className="btn-secondary w-full" href="/member/productions">My production call sheets</Link>}
     {isMember && user.member?.status === 'ACTIVE' && <Link className="btn-secondary w-full" href="/member/elections">Elections and voting</Link>}
     {isMember && <Link className="btn-secondary w-full" href="/member/history">Attendance history</Link>}
+    <PushOptIn />
     <p>You’re signed in to Eagles Drama Club.</p>
     <div className="flex flex-wrap gap-3">
       {user.role !== 'MEMBER' && <Link className="btn-primary" href="/admin">Committee home</Link>}

@@ -12,6 +12,8 @@ import { CreateInviteForm } from '@/components/create-invite-form'
 import { CopyFeeReminder, CopyMessageButton } from '@/components/admin/copy-message-button'
 import { SessionControls } from '@/components/rehearsals/session-controls'
 import { SignOut } from '@/components/sign-out'
+import { PushOptIn } from '@/components/push-opt-in'
+import { PushAnnouncementForm } from '@/components/admin/push-announcement-form'
 
 const pageSchema = z.coerce.number().int().min(1).max(10000).catch(1)
 const labels: Record<string, string> = {
@@ -43,6 +45,8 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       <p className="text-slate-600">Welcome, {actor.name}. Manage club work from this page.</p>
       <div className="flex flex-wrap gap-3"><Link className="btn-primary" href="/admin/members/new">Add member</Link><Link className="btn-secondary" href="/admin/rehearsals">Manage rehearsals</Link></div>
     </section>
+    <PushOptIn />
+    <PushAnnouncementForm />
 
     <section className="card space-y-4"><div><h2>Members by status</h2><p className="text-sm text-slate-600">Current membership register.</p></div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{memberStatuses.map((status) => <Link key={status} className="rounded-xl border border-slate-200 p-4 hover:bg-stone-50" href={`/admin/members?status=${status}`}><span className="block text-2xl font-semibold">{statusCounts.get(status) ?? 0}</span><span className="text-sm text-slate-600">{labels[status]}</span></Link>)}</div>

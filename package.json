@@ -21,9 +21,12 @@
     "db:status": "node scripts/prisma.mjs migrate status"
   },
   "dependencies": {
+    "@firebase/app": "^0.16.4",
+    "@firebase/messaging": "^0.13.3",
     "@next/env": "^16.4.2",
     "@prisma/client": "5.22.0",
     "bcryptjs": "^2.4.3",
+    "firebase-admin": "^14.5.0",
     "next": "^16.4.2",
     "next-auth": "^5.0.0-beta.32",
     "react": "^19.0.0",

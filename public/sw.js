@@ -41,6 +41,36 @@ self.addEventListener('activate', (event) => {
   })())
 })
 
+self.addEventListener('push', (event) => {
+  const payload = event.data.json()
+  const notification = payload.notification || {}
+  const title = notification.title || 'Eagles Drama Club'
+  const body = notification.body || 'A new club update is available. Sign in to view the details.'
+  event.waitUntil(self.registration.showNotification(title, {
+    body,
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    data: { url: payload.data?.url || '/member' },
+  }))
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const target = new URL(event.notification.data?.url || '/member', self.location.origin)
+  if (target.origin !== self.location.origin) return
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+    for (const client of windows) {
+      if ('focus' in client) {
+        await client.navigate(target.href)
+        await client.focus()
+        return
+      }
+    }
+    await self.clients.openWindow(target.href)
+  })())
+})
+
 self.addEventListener('fetch', (event) => {
   const { request } = event
   if (request.method !== 'GET') return

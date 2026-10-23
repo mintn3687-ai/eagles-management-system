@@ -41,7 +41,31 @@ For privacy, the service worker does not cache application pages, sign-in routes
 
 To check locally, run `npm run build` and `npm run start`, then open the site in a browser and inspect **Application → Manifest** and **Application → Service Workers** in DevTools. Production behavior requires HTTPS. To check the offline fallback, enable DevTools’ offline network mode and navigate to a page; check **Application → Cache Storage** to confirm no application pages or API responses are stored.
 
-No new Vercel environment variables or database migrations are required.
+### Push notifications
+
+Members and staff can explicitly enable notifications on each device from their
+signed-in home page. Committee members can send a generic club update, and one
+daily Vercel Cron run checks for scheduled rehearsals starting in the next 24
+hours (06:00 UTC / 09:00 Nairobi). Lock-screen text is generic; users must sign in to view details. Delivery
+is limited to active, consented accounts that opted in, and may arrive while
+they are signed out.
+
+Configure Firebase Cloud Messaging for web and add these variables in Vercel:
+`NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`,
+`NEXT_PUBLIC_FIREBASE_PROJECT_ID`, `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`,
+`NEXT_PUBLIC_FIREBASE_APP_ID`, and `NEXT_PUBLIC_FIREBASE_VAPID_KEY`.
+Add `FIREBASE_SERVICE_ACCOUNT_JSON` as a server-only secret and `CRON_SECRET`
+as a long random secret. Never add service-account credentials to a
+`NEXT_PUBLIC_` variable or source control. Add the site’s production and
+preview domains to Firebase’s authorized web domains. Vercel Cron runs on the
+production deployment; test a preview manually only with a preview database,
+test Firebase project, and test devices, because the endpoint sends real pushes.
+iPhone/iPad users need
+iOS 16.4 or later and must install the app to the Home Screen before opting in.
+
+The additive `20261023200000_push_notifications` migration creates only the
+push-subscription and delivery tables. Review the SQL before applying it to a
+database; do not apply it to production without explicit approval.
 
 ### Recovering a Super Admin password
 

@@ -1145,3 +1145,25 @@ model ReconciliationEntry {
   @@unique([batchId, statementReference])
   @@index([batchId, paymentId])
 }
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model PushDelivery {
+  id             String    @id @default(cuid())
+  subscriptionId String
+  userId         String
+  eventKey       String
+  sentAt         DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@unique([subscriptionId, eventKey])
+  @@index([eventKey])
+}
