@@ -4,11 +4,14 @@ export const roleLevel: Record<UserRole, number> = { MEMBER: 1, COMMITTEE: 2, SU
 
 export const permissionRoles = {
   'members:read': 'COMMITTEE',
+  'members:manage': 'COMMITTEE',
+  'absences:manage': 'COMMITTEE',
   'payments:manage': 'COMMITTEE',
   'fees:manage': 'SUPER_ADMIN',
   'finance:manage': 'COMMITTEE',
   'reimbursements:request': 'MEMBER',
   'seasons:manage': 'SUPER_ADMIN',
+  'settings:manage': 'SUPER_ADMIN',
   'team:manage': 'SUPER_ADMIN',
   'meetings:manage': 'COMMITTEE',
   'meetings:read': 'MEMBER',

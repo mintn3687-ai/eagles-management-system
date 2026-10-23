@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { z } from 'zod'
-import { pageUser } from '@/lib/page-access'
+import { pagePermission } from '@/lib/page-access'
 import { TeamRoleForm, TransferAdminForm } from '@/components/admin/team-forms'
 import { adminReadService } from '@/modules/admin/read-service'
 
@@ -8,7 +8,7 @@ const pageSchema = z.coerce.number().int().min(1).max(10000).catch(1)
 const PAGE_SIZE = 20
 
 export default async function AdminTeamPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
-  await pageUser('SUPER_ADMIN')
+  await pagePermission('team:manage')
   const requestedPage = pageSchema.parse((await searchParams).page ?? '1')
   const total = await adminReadService.teamCount()
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))

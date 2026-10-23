@@ -1,21 +1,10 @@
 'use server'
-import { revalidatePath } from 'next/cache'
-import { saveClubSettings, adminManagementError } from '@/lib/admin-management'
 
-export type AdminActionState = { error?: string; success?: boolean; message?: string }
+import { saveClubSettingsAction as saveSettings } from '@/modules/admin/management-actions'
+import type { AdminActionState } from '@/modules/admin/management-actions'
 
-export async function saveClubSettingsAction(_state: AdminActionState, form: FormData): Promise<AdminActionState> {
-  try {
-    await saveClubSettings({
-      clubName: form.get('clubName'),
-      attendanceThreshold: form.get('attendanceThreshold'),
-      absenceDeadlineHours: form.get('absenceDeadlineHours'),
-      graceDays: form.get('graceDays'),
-      subscriptionBillingPeriod: form.get('subscriptionBillingPeriod'),
-    })
-    revalidatePath('/admin', 'layout')
-    revalidatePath('/admin/settings')
-    revalidatePath('/admin/analytics')
-    return { success: true }
-  } catch (error) { return { error: adminManagementError(error) } }
+export type { AdminActionState }
+
+export async function saveClubSettingsAction(state: AdminActionState, form: FormData): Promise<AdminActionState> {
+  return saveSettings(state, form)
 }

@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { pagePermission } from '@/lib/page-access'
 import { formatNairobiDate } from '@/lib/dates'
-import { listMemberCallSheets } from '@/modules/productions/service'
+import { listMemberCallSheets } from '@/modules/productions/read-service'
 
 export default async function MemberProductionsPage() {
   const user = await pagePermission('productions:read')

@@ -214,38 +214,40 @@ model User {
   failedLogins      Int       @default(0)
   lockedUntil       DateTime?
   consentAcceptedAt DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @default(now()) @updatedAt
 
   // Relationships
-  member                  Member?             @relation("userToMember")
-  createdRehearsals       Rehearsal[]         @relation("createdBy")
-  reviewedAttendances     Attendance[]        @relation("reviewedBy")
-  createdFeeSettings      FeeSetting[]        @relation("createdBy")
-  createdPayments         Payment[]           @relation("recordedBy")
-  auditLogs               AuditLog[]          @relation("actor")
-  invites                 Invite[]            @relation("userInvites")
-  createdMeetings         Meeting[]           @relation("meetingCreator")
-  approvedMinutes         Meeting[]           @relation("minutesApprover")
-  decidedMotions          Motion[]            @relation("motionDecisionMaker")
-  createdActionItems      MeetingActionItem[] @relation("actionItemCreator")
-  createdElections        Election[]          @relation("electionCreator")
-  approvedElectionResults Election[]          @relation("electionResultsApprover")
-  reviewedNominations     Nomination[]        @relation("nominationReviewer")
-  createdProductions      Production[]        @relation("productionCreator")
-  createdScriptVersions   ScriptVersion[]     @relation("scriptVersionCreator")
-  createdProductionTasks  ProductionTask[]    @relation("productionTaskCreator")
-  createdShowDates        ShowDate[]          @relation("showDateCreator")
-  createdCallSheets       CallSheet[]         @relation("callSheetCreator")
-  updatedAssets           Asset[]             @relation("assetUpdater")
-  createdPostShowNotes    PostShowNote[]      @relation("postShowNoteCreator")
-  createdBudgets          Budget[]            @relation("budgetCreator")
-  createdFinanceEntries   FinanceEntry[]      @relation("financeEntryCreator")
-  approvedReimbursements  Reimbursement[]     @relation("reimbursementApprover")
-  paidReimbursements      Reimbursement[]     @relation("reimbursementPayer")
+  member                  Member?               @relation("userToMember")
+  createdRehearsals       Rehearsal[]           @relation("createdBy")
+  reviewedAttendances     Attendance[]          @relation("reviewedBy")
+  createdFeeSettings      FeeSetting[]          @relation("createdBy")
+  createdPayments         Payment[]             @relation("recordedBy")
+  auditLogs               AuditLog[]            @relation("actor")
+  invites                 Invite[]              @relation("userInvites")
+  createdMeetings         Meeting[]             @relation("meetingCreator")
+  approvedMinutes         Meeting[]             @relation("minutesApprover")
+  decidedMotions          Motion[]              @relation("motionDecisionMaker")
+  createdActionItems      MeetingActionItem[]   @relation("actionItemCreator")
+  createdElections        Election[]            @relation("electionCreator")
+  approvedElectionResults Election[]            @relation("electionResultsApprover")
+  reviewedNominations     Nomination[]          @relation("nominationReviewer")
+  createdProductions      Production[]          @relation("productionCreator")
+  createdScriptVersions   ScriptVersion[]       @relation("scriptVersionCreator")
+  createdProductionTasks  ProductionTask[]      @relation("productionTaskCreator")
+  createdShowDates        ShowDate[]            @relation("showDateCreator")
+  createdCallSheets       CallSheet[]           @relation("callSheetCreator")
+  updatedAssets           Asset[]               @relation("assetUpdater")
+  createdPostShowNotes    PostShowNote[]        @relation("postShowNoteCreator")
+  createdBudgets          Budget[]              @relation("budgetCreator")
+  createdFinanceEntries   FinanceEntry[]        @relation("financeEntryCreator")
+  approvedReimbursements  Reimbursement[]       @relation("reimbursementApprover")
+  paidReimbursements      Reimbursement[]       @relation("reimbursementPayer")
   createdCampaigns        FundraisingCampaign[] @relation("campaignCreator")
-  recordedContributions   Contribution[]      @relation("contributionRecorder")
-  recordedTicketSales     TicketSale[]        @relation("ticketSaleRecorder")
-  recordedTicketRefunds   TicketRefund[]      @relation("ticketRefundRecorder")
-  createdGuestEntries     GuestListEntry[]    @relation("guestEntryCreator")
+  recordedContributions   Contribution[]        @relation("contributionRecorder")
+  recordedTicketSales     TicketSale[]          @relation("ticketSaleRecorder")
+  recordedTicketRefunds   TicketRefund[]        @relation("ticketRefundRecorder")
+  createdGuestEntries     GuestListEntry[]      @relation("guestEntryCreator")
   createdReconciliations  ReconciliationBatch[] @relation("reconciliationCreator")
 
   @@index([name])
@@ -264,6 +266,7 @@ model Member {
   joinedAt              DateTime
   notes                 String?
   createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @default(now()) @updatedAt
 
   // Relationships
   user                 User?                 @relation("userToMember", fields: [userId], references: [id])
@@ -281,7 +284,7 @@ model Member {
   ownedProductionTasks ProductionTask[]      @relation("productionTaskOwner")
   checkedOutAssets     Asset[]               @relation("assetHolder")
   callSheetEntries     CallSheetMember[]
-  reimbursements      Reimbursement[]         @relation("reimbursementRequester")
+  reimbursements       Reimbursement[]       @relation("reimbursementRequester")
 
   @@index([status, fullName, id])
   @@index([fullName, id])
@@ -295,6 +298,8 @@ model MemberStatusHistory {
   status      MemberStatus
   effectiveAt DateTime
   recordedAt  DateTime     @default(now())
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @default(now()) @updatedAt
 
   member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
 
@@ -308,6 +313,8 @@ model Invite {
   tokenHash String    @unique
   expiresAt DateTime
   usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now()) @updatedAt
 
   // Relationships
   user User @relation("userInvites", fields: [userId], references: [id])
@@ -326,6 +333,8 @@ model Rehearsal {
   checkInCode  String?
   createdById  String
   productionId String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @default(now()) @updatedAt
 
   // Relationships
   createdBy   User         @relation("createdBy", fields: [createdById], references: [id])
@@ -350,6 +359,8 @@ model Attendance {
   reviewedById   String?
   reviewedAt     DateTime?
   wrongCodeTries Int              @default(0)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @default(now()) @updatedAt
 
   // Relationships
   rehearsal  Rehearsal @relation("rehearsalAttendances", fields: [rehearsalId], references: [id])
@@ -369,6 +380,8 @@ model FeeSetting {
   effectiveFrom DateTime
   reason        String
   createdById   String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @default(now()) @updatedAt
 
   // Relationships
   createdBy User @relation("createdBy", fields: [createdById], references: [id])
@@ -393,12 +406,13 @@ model Payment {
   resultDesc        String?
   recordedById      String
   createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @default(now()) @updatedAt
   paidAt            DateTime?
 
   // Relationships
-  member     Member  @relation("paymentsMember", fields: [memberId], references: [id])
-  season     Season? @relation(fields: [seasonId], references: [id], onDelete: Restrict)
-  recordedBy User    @relation("recordedBy", fields: [recordedById], references: [id])
+  member              Member               @relation("paymentsMember", fields: [memberId], references: [id])
+  season              Season?              @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  recordedBy          User                 @relation("recordedBy", fields: [recordedById], references: [id])
   reconciliationEntry ReconciliationEntry?
 
   @@index([memberId, type, createdAt, id])
@@ -407,14 +421,14 @@ model Payment {
 }
 
 model Season {
-  id                     String             @id @default(cuid())
+  id                     String                @id @default(cuid())
   name                   String
-  startDate              DateTime           @db.Timestamp(3)
-  endDate                DateTime           @db.Timestamp(3)
-  isCurrent              Boolean            @default(false)
+  startDate              DateTime              @db.Timestamp(3)
+  endDate                DateTime              @db.Timestamp(3)
+  isCurrent              Boolean               @default(false)
   membershipSnapshotHash String?
-  createdAt              DateTime           @default(now())
-  updatedAt              DateTime           @updatedAt
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
   memberships            SeasonMembership[]
   payments               Payment[]
   productions            Production[]
@@ -540,8 +554,10 @@ model MeetingActionItem {
 }
 
 model Setting {
-  key   String @id
-  value Json
+  key       String   @id
+  value     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 }
 
 model AuditLog {
@@ -552,6 +568,7 @@ model AuditLog {
   entityId  String
   details   Json
   createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 
   // Relationships
   actor User @relation("actor", fields: [actorId], references: [id])
@@ -567,6 +584,8 @@ model RateLimitBucket {
   key          String   @id
   count        Int
   windowEndsAt DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now()) @updatedAt
 
   @@index([windowEndsAt])
 }
@@ -660,6 +679,7 @@ model Ballot {
   id          String         @id @default(cuid())
   electionId  String
   submittedAt DateTime       @default(now())
+  createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
   election    Election       @relation(fields: [electionId], references: [id], onDelete: Restrict)
   choices     BallotChoice[]
@@ -700,18 +720,18 @@ model VoteReceipt {
 }
 
 model Production {
-  id             String           @id @default(cuid())
+  id             String                @id @default(cuid())
   title          String
   description    String?
-  status         ProductionStatus @default(PLANNING)
-  startDate      DateTime?        @db.Timestamp(3)
-  endDate        DateTime?        @db.Timestamp(3)
+  status         ProductionStatus      @default(PLANNING)
+  startDate      DateTime?             @db.Timestamp(3)
+  endDate        DateTime?             @db.Timestamp(3)
   seasonId       String?
   createdById    String
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  season         Season?          @relation(fields: [seasonId], references: [id], onDelete: Restrict)
-  createdBy      User             @relation("productionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  season         Season?               @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  createdBy      User                  @relation("productionCreator", fields: [createdById], references: [id], onDelete: Restrict)
   scriptVersions ScriptVersion[]
   roles          ProductionRole[]
   crew           CrewAssignment[]
@@ -812,15 +832,15 @@ model ProductionTask {
 }
 
 model ShowDate {
-  id            String         @id @default(cuid())
+  id            String           @id @default(cuid())
   productionId  String
-  startsAt      DateTime       @db.Timestamp(3)
+  startsAt      DateTime         @db.Timestamp(3)
   venue         String
   createdById   String
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  production    Production     @relation(fields: [productionId], references: [id], onDelete: Restrict)
-  createdBy     User           @relation("showDateCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  production    Production       @relation(fields: [productionId], references: [id], onDelete: Restrict)
+  createdBy     User             @relation("showDateCreator", fields: [createdById], references: [id], onDelete: Restrict)
   callSheets    CallSheet[]
   postShowNotes PostShowNote[]
   ticketTypes   TicketType[]
@@ -898,18 +918,18 @@ model PostShowNote {
 }
 
 model Budget {
-  id           String     @id @default(cuid())
+  id           String      @id @default(cuid())
   seasonId     String?
   productionId String?
   category     String
   amount       Int
   notes        String?
   createdById  String
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  season       Season?    @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  season       Season?     @relation(fields: [seasonId], references: [id], onDelete: Restrict)
   production   Production? @relation(fields: [productionId], references: [id], onDelete: Restrict)
-  createdBy    User       @relation("budgetCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdBy    User        @relation("budgetCreator", fields: [createdById], references: [id], onDelete: Restrict)
 
   @@index([seasonId, category])
   @@index([productionId, category])
@@ -917,21 +937,21 @@ model Budget {
 }
 
 model FinanceEntry {
-  id                 String          @id @default(cuid())
-  type               FinanceEntryType
-  category           String
-  amount             Int
-  description        String
-  receiptReference   String?
-  occurredAt         DateTime        @db.Timestamp(3)
-  seasonId           String?
-  productionId       String?
-  recordedById       String
-  createdAt          DateTime        @default(now())
-  updatedAt          DateTime        @updatedAt
-  season             Season?         @relation(fields: [seasonId], references: [id], onDelete: Restrict)
-  production         Production?     @relation(fields: [productionId], references: [id], onDelete: Restrict)
-  recordedBy         User            @relation("financeEntryCreator", fields: [recordedById], references: [id], onDelete: Restrict)
+  id               String           @id @default(cuid())
+  type             FinanceEntryType
+  category         String
+  amount           Int
+  description      String
+  receiptReference String?
+  occurredAt       DateTime         @db.Timestamp(3)
+  seasonId         String?
+  productionId     String?
+  recordedById     String
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  season           Season?          @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  production       Production?      @relation(fields: [productionId], references: [id], onDelete: Restrict)
+  recordedBy       User             @relation("financeEntryCreator", fields: [recordedById], references: [id], onDelete: Restrict)
 
   @@index([type, occurredAt])
   @@index([seasonId, type, occurredAt])
@@ -940,26 +960,26 @@ model FinanceEntry {
 }
 
 model Reimbursement {
-  id                   String              @id @default(cuid())
-  requestedByMemberId  String
-  amount               Int
-  reason               String
-  receiptReference     String?
-  status               ReimbursementStatus @default(REQUESTED)
-  approvedById         String?
-  decidedAt            DateTime?
-  paidById             String?
-  paidAt               DateTime?
-  paymentReference     String?
-  seasonId             String?
-  productionId         String?
-  createdAt            DateTime            @default(now())
-  updatedAt            DateTime            @updatedAt
-  requestedBy          Member              @relation("reimbursementRequester", fields: [requestedByMemberId], references: [id], onDelete: Restrict)
-  approvedBy           User?               @relation("reimbursementApprover", fields: [approvedById], references: [id], onDelete: Restrict)
-  paidBy               User?               @relation("reimbursementPayer", fields: [paidById], references: [id], onDelete: Restrict)
-  season               Season?             @relation(fields: [seasonId], references: [id], onDelete: Restrict)
-  production           Production?          @relation(fields: [productionId], references: [id], onDelete: Restrict)
+  id                  String              @id @default(cuid())
+  requestedByMemberId String
+  amount              Int
+  reason              String
+  receiptReference    String?
+  status              ReimbursementStatus @default(REQUESTED)
+  approvedById        String?
+  decidedAt           DateTime?
+  paidById            String?
+  paidAt              DateTime?
+  paymentReference    String?
+  seasonId            String?
+  productionId        String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  requestedBy         Member              @relation("reimbursementRequester", fields: [requestedByMemberId], references: [id], onDelete: Restrict)
+  approvedBy          User?               @relation("reimbursementApprover", fields: [approvedById], references: [id], onDelete: Restrict)
+  paidBy              User?               @relation("reimbursementPayer", fields: [paidById], references: [id], onDelete: Restrict)
+  season              Season?             @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  production          Production?         @relation(fields: [productionId], references: [id], onDelete: Restrict)
 
   @@index([status, createdAt])
   @@index([requestedByMemberId, status])
@@ -970,19 +990,19 @@ model Reimbursement {
 }
 
 model FundraisingCampaign {
-  id           String                   @id @default(cuid())
-  title        String
-  description  String?
-  goalAmount   Int
-  status       FundraisingCampaignStatus @default(ACTIVE)
-  seasonId     String?
-  productionId String?
-  createdById  String
-  createdAt    DateTime                 @default(now())
-  updatedAt    DateTime                 @updatedAt
-  season       Season?                  @relation(fields: [seasonId], references: [id], onDelete: Restrict)
-  production   Production?              @relation(fields: [productionId], references: [id], onDelete: Restrict)
-  createdBy    User                     @relation("campaignCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  id            String                    @id @default(cuid())
+  title         String
+  description   String?
+  goalAmount    Int
+  status        FundraisingCampaignStatus @default(ACTIVE)
+  seasonId      String?
+  productionId  String?
+  createdById   String
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+  season        Season?                   @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  production    Production?               @relation(fields: [productionId], references: [id], onDelete: Restrict)
+  createdBy     User                      @relation("campaignCreator", fields: [createdById], references: [id], onDelete: Restrict)
   contributions Contribution[]
 
   @@index([status, createdAt])
@@ -992,23 +1012,23 @@ model FundraisingCampaign {
 }
 
 model Contribution {
-  id           String          @id @default(cuid())
+  id           String               @id @default(cuid())
   campaignId   String?
   type         ContributionType
   contributor  String?
   amount       Int
   method       PaymentMethod
   reference    String?
-  receivedAt   DateTime        @db.Timestamp(3)
+  receivedAt   DateTime             @db.Timestamp(3)
   seasonId     String?
   productionId String?
   recordedById String
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
   campaign     FundraisingCampaign? @relation(fields: [campaignId], references: [id], onDelete: Restrict)
-  season       Season?         @relation(fields: [seasonId], references: [id], onDelete: Restrict)
-  production   Production?     @relation(fields: [productionId], references: [id], onDelete: Restrict)
-  recordedBy   User            @relation("contributionRecorder", fields: [recordedById], references: [id], onDelete: Restrict)
+  season       Season?              @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  production   Production?          @relation(fields: [productionId], references: [id], onDelete: Restrict)
+  recordedBy   User                 @relation("contributionRecorder", fields: [recordedById], references: [id], onDelete: Restrict)
 
   @@index([type, receivedAt])
   @@index([campaignId, receivedAt])
@@ -1018,37 +1038,37 @@ model Contribution {
 }
 
 model TicketType {
-  id               String     @id @default(cuid())
-  showDateId       String
-  name             String
-  price            Int
+  id                String       @id @default(cuid())
+  showDateId        String
+  name              String
+  price             Int
   quantityAvailable Int?
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
-  showDate         ShowDate   @relation(fields: [showDateId], references: [id], onDelete: Restrict)
-  sales            TicketSale[]
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  showDate          ShowDate     @relation(fields: [showDateId], references: [id], onDelete: Restrict)
+  sales             TicketSale[]
 
   @@unique([showDateId, name])
   @@index([showDateId, createdAt])
 }
 
 model TicketSale {
-  id           String       @id @default(cuid())
-  ticketTypeId String
-  quantity     Int
-  unitPrice    Int
-  totalAmount  Int
-  buyerName    String?
-  method       PaymentMethod
-  reference    String?
-  soldAt       DateTime     @default(now())
-  recordedById String
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  ticketType   TicketType   @relation(fields: [ticketTypeId], references: [id], onDelete: Restrict)
-  recordedBy   User         @relation("ticketSaleRecorder", fields: [recordedById], references: [id], onDelete: Restrict)
-  refunds      TicketRefund[]
-  guestEntries GuestListEntry[]
+  id                  String               @id @default(cuid())
+  ticketTypeId        String
+  quantity            Int
+  unitPrice           Int
+  totalAmount         Int
+  buyerName           String?
+  method              PaymentMethod
+  reference           String?
+  soldAt              DateTime             @default(now())
+  recordedById        String
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  ticketType          TicketType           @relation(fields: [ticketTypeId], references: [id], onDelete: Restrict)
+  recordedBy          User                 @relation("ticketSaleRecorder", fields: [recordedById], references: [id], onDelete: Restrict)
+  refunds             TicketRefund[]
+  guestEntries        GuestListEntry[]
   reconciliationEntry ReconciliationEntry?
 
   @@index([ticketTypeId, soldAt])
@@ -1072,18 +1092,18 @@ model TicketRefund {
 }
 
 model GuestListEntry {
-  id           String     @id @default(cuid())
+  id           String      @id @default(cuid())
   showDateId   String
   ticketSaleId String?
   name         String
   note         String?
   checkedInAt  DateTime?
   addedById    String
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  showDate     ShowDate   @relation(fields: [showDateId], references: [id], onDelete: Restrict)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  showDate     ShowDate    @relation(fields: [showDateId], references: [id], onDelete: Restrict)
   ticketSale   TicketSale? @relation(fields: [ticketSaleId], references: [id], onDelete: Restrict)
-  addedBy      User       @relation("guestEntryCreator", fields: [addedById], references: [id], onDelete: Restrict)
+  addedBy      User        @relation("guestEntryCreator", fields: [addedById], references: [id], onDelete: Restrict)
 
   @@index([showDateId, checkedInAt])
   @@index([ticketSaleId])
@@ -1091,15 +1111,15 @@ model GuestListEntry {
 }
 
 model ReconciliationBatch {
-  id            String               @id @default(cuid())
+  id            String                @id @default(cuid())
   method        PaymentMethod
-  statementDate DateTime             @db.Timestamp(3)
+  statementDate DateTime              @db.Timestamp(3)
   reference     String
-  status        ReconciliationStatus @default(OPEN)
+  status        ReconciliationStatus  @default(OPEN)
   createdById   String
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
-  createdBy     User                 @relation("reconciliationCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  createdBy     User                  @relation("reconciliationCreator", fields: [createdById], references: [id], onDelete: Restrict)
   entries       ReconciliationEntry[]
 
   @@unique([method, reference])
@@ -1108,19 +1128,19 @@ model ReconciliationBatch {
 }
 
 model ReconciliationEntry {
-  id               String              @id @default(cuid())
-  batchId          String
+  id                 String              @id @default(cuid())
+  batchId            String
   statementReference String
-  amount           Int
-  paymentId        String?             @unique
-  ticketSaleId     String?             @unique
-  notes            String?
-  matchedAt        DateTime?
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
-  batch            ReconciliationBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
-  payment          Payment?            @relation(fields: [paymentId], references: [id], onDelete: Restrict)
-  ticketSale       TicketSale?         @relation(fields: [ticketSaleId], references: [id], onDelete: Restrict)
+  amount             Int
+  paymentId          String?             @unique
+  ticketSaleId       String?             @unique
+  notes              String?
+  matchedAt          DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  batch              ReconciliationBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  payment            Payment?            @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  ticketSale         TicketSale?         @relation(fields: [ticketSaleId], references: [id], onDelete: Restrict)
 
   @@unique([batchId, statementReference])
   @@index([batchId, paymentId])

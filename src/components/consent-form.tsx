@@ -1,6 +1,6 @@
 'use client'
 import { useActionState } from 'react'
-import { acceptConsentAction } from '@/app/consent/actions'
+import { acceptConsentAction } from '@/modules/consent/actions'
 import { SubmitButton } from './submit-button'
 
 export function ConsentForm() {

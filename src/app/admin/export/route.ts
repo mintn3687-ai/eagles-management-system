@@ -1,7 +1,7 @@
 import { AccessError, requireRole } from '@/lib/permissions'
-import { prisma } from '@/lib/db'
 import { formatNairobiDate, nairobiDateKey } from '@/lib/dates'
 import { createZip, type ZipFile } from '@/lib/zip'
+import { adminExportRepository } from '@/modules/admin/export-repository'
 
 export const runtime = 'nodejs'
 
@@ -40,27 +40,27 @@ export async function GET() {
     const files: ZipFile[] = [
       { name: 'members.csv', content: await csvFromPages(
         ['id', 'userId', 'fullName', 'phone', 'email', 'studentRegNo', 'emergencyContactName', 'emergencyContactPhone', 'status', 'joinedAt', 'notes', 'createdAt', 'loginEmail', 'loginRole', 'loginActive'],
-        (cursor) => prisma.member.findMany({ orderBy: { id: 'asc' }, take: 500, ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}), include: { user: { select: { email: true, role: true, isActive: true } } } }),
+        (cursor) => adminExportRepository.members(cursor),
         (m) => [m.id, m.userId, m.fullName, m.phone, m.email, m.studentRegNo, m.emergencyContactName, m.emergencyContactPhone, m.status, m.joinedAt, m.notes, m.createdAt, m.user?.email, m.user?.role, m.user?.isActive],
       ) },
       { name: 'rehearsals.csv', content: await csvFromPages(
-        ['id', 'title', 'date', 'startTime', 'endTime', 'venue', 'status', 'checkInCode', 'createdById'],
-        (cursor) => prisma.rehearsal.findMany({ orderBy: { id: 'asc' }, take: 500, ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}) }),
-        (r) => [r.id, r.title, r.date, r.startTime, r.endTime, r.venue, r.status, r.checkInCode, r.createdById],
+        ['id', 'title', 'date', 'startTime', 'endTime', 'venue', 'status', 'createdById'],
+        (cursor) => adminExportRepository.rehearsals(cursor),
+        (r) => [r.id, r.title, r.date, r.startTime, r.endTime, r.venue, r.status, r.createdById],
       ) },
       { name: 'attendance.csv', content: await csvFromPages(
         ['id', 'memberId', 'memberName', 'rehearsalId', 'rehearsalTitle', 'rehearsalDate', 'status', 'markedBy', 'markedAt', 'reason', 'reviewStatus', 'reviewNote', 'reviewedById', 'reviewedAt', 'wrongCodeTries'],
-        (cursor) => prisma.attendance.findMany({ orderBy: { id: 'asc' }, take: 500, ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}), include: { member: { select: { fullName: true } }, rehearsal: { select: { title: true, date: true } } } }),
+        (cursor) => adminExportRepository.attendance(cursor),
         (a) => [a.id, a.memberId, a.member.fullName, a.rehearsalId, a.rehearsal.title, a.rehearsal.date, a.status, a.markedBy, a.markedAt, a.reason, a.reviewStatus, a.reviewNote, a.reviewedById, a.reviewedAt, a.wrongCodeTries],
       ) },
       { name: 'payments.csv', content: await csvFromPages(
         ['id', 'memberId', 'memberName', 'type', 'amountKES', 'status', 'method', 'phone', 'checkoutRequestId', 'reference', 'receipt', 'periodStart', 'periodEnd', 'resultDesc', 'recordedById', 'createdAt', 'paidAt'],
-        (cursor) => prisma.payment.findMany({ orderBy: { id: 'asc' }, take: 500, ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}), include: { member: { select: { fullName: true } } } }),
+        (cursor) => adminExportRepository.payments(cursor),
         (p) => [p.id, p.memberId, p.member.fullName, p.type, p.amount, p.status, p.method, p.phone, p.checkoutRequestId, p.reference, p.mpesaReceipt, p.periodStart, p.periodEnd, p.resultDesc, p.recordedById, p.createdAt, p.paidAt],
       ) },
       { name: 'audit.csv', content: await csvFromPages(
         ['id', 'actorId', 'actorName', 'actorEmail', 'action', 'entity', 'entityId', 'details', 'createdAt'],
-        (cursor) => prisma.auditLog.findMany({ orderBy: { id: 'asc' }, take: 500, ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}), include: { actor: { select: { name: true, email: true } } } }),
+        (cursor) => adminExportRepository.audit(cursor),
         (a) => [a.id, a.actorId, a.actor.name, a.actor.email, a.action, a.entity, a.entityId, a.details, a.createdAt],
       ) },
     ]

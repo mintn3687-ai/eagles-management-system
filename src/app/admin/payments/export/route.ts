@@ -1,8 +1,8 @@
 import { formatNairobiDate } from '@/lib/dates'
-import { prisma } from '@/lib/db'
 import { paymentWhere } from '@/lib/payments-query'
 import { requireRole } from '@/lib/permissions'
 import { paymentListSchema } from '@/lib/validation/fees'
+import { adminExportRepository } from '@/modules/admin/export-repository'
 
 const columns = ['Receipt number', 'Member', 'Type', 'Status', 'Method', 'Amount (KES)', 'Date', 'Reference']
 const encoder = new TextEncoder()
@@ -27,17 +27,7 @@ export async function GET(request: Request) {
         let skip = 0
         const take = 250
         while (true) {
-          const payments = await prisma.payment.findMany({
-            where,
-            orderBy: [{ paidAt: { sort: 'desc', nulls: 'last' } }, { id: 'desc' }],
-            skip,
-            take,
-            select: {
-              id: true, type: true, status: true, method: true, amount: true,
-              paidAt: true, createdAt: true, reference: true,
-              member: { select: { fullName: true } },
-            },
-          })
+          const payments = await adminExportRepository.paymentCsvPage(where, skip, take)
           for (const payment of payments) {
             const row = [
               payment.id,

@@ -104,7 +104,7 @@ export async function openSession(rehearsalIdInput: unknown): Promise<{ checkInC
     await tx.rehearsal.update({ where: { id: rehearsalId }, data: { status: 'OPEN', checkInCode } })
     await tx.auditLog.create({ data: {
       actorId: actor.id, action: 'SESSION_OPENED', entity: 'Rehearsal', entityId: rehearsalId,
-      details: { checkInCode },
+      details: {},
     } })
   })
   return { checkInCode }

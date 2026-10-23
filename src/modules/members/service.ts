@@ -3,6 +3,10 @@ import { getMemberAttendanceHistory } from '@/lib/attendance-analytics'
 import { summarizeMemberAttendance } from './rules'
 import { memberDetailsRepository } from './repository'
 
+export async function getMemberInviteTarget(memberId: string) {
+  return memberDetailsRepository.inviteTarget(memberId)
+}
+
 export async function getMemberDetail(memberId: string) {
   const member = await memberDetailsRepository.findById(memberId)
   if (!member) return null

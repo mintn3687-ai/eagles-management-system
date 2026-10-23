@@ -5,7 +5,7 @@ import { writeAuditLog } from '@/lib/audit'
 import { lockRow } from '@/lib/row-lock'
 import { nairobiDateKey, parseNairobiDate } from '@/lib/dates'
 import { getSubscriptionPeriodRange, resolveMemberFeeType } from '@/lib/fees'
-import { recordMemberStatusChange } from '@/lib/members/status-history'
+import { memberDetailsRepository } from '@/modules/members/repository'
 import { syncCurrentSeasonMemberStatus } from '@/modules/seasons/service'
 import { financeRepository, seasonPaymentsRepository } from './repository'
 import { isPaymentWithinSeason } from './rules'
@@ -57,7 +57,7 @@ export async function recordManualPayment(input: {
     if (type === 'REGISTRATION') {
       await financeRepository.activateMember(tx, member.id, paidAt)
       await syncCurrentSeasonMemberStatus(tx, member.id, 'ACTIVE')
-      await recordMemberStatusChange(tx, member.id, member.status, 'ACTIVE', paidAt)
+      await memberDetailsRepository.recordStatusChange(tx, member.id, member.status, 'ACTIVE', paidAt)
     } else {
       await financeRepository.activateMember(tx, member.id)
       await syncCurrentSeasonMemberStatus(tx, member.id, 'ACTIVE')
@@ -103,7 +103,7 @@ export async function waiveMemberFee(input: { memberId: string; reason: string }
     if (type === 'REGISTRATION') {
       await financeRepository.activateMember(tx, member.id, paidAt)
       await syncCurrentSeasonMemberStatus(tx, member.id, 'ACTIVE')
-      await recordMemberStatusChange(tx, member.id, member.status, 'ACTIVE', paidAt)
+      await memberDetailsRepository.recordStatusChange(tx, member.id, member.status, 'ACTIVE', paidAt)
     } else {
       await financeRepository.activateMember(tx, member.id)
       await syncCurrentSeasonMemberStatus(tx, member.id, 'ACTIVE')

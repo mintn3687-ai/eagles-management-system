@@ -1,7 +1,7 @@
 import 'server-only'
 import { BillingPeriod } from '@prisma/client'
-import { prisma } from '@/lib/db'
 import { clubSettingsSchema, type ClubSettings } from '@/lib/validation/admin'
+import { settingsRepository } from './settings-repository'
 
 export const defaultClubSettings: ClubSettings = {
   clubName: 'Eagles Drama Club',
@@ -12,10 +12,7 @@ export const defaultClubSettings: ClubSettings = {
 }
 
 export async function getClubSettings(): Promise<ClubSettings> {
-  const [rows, subscriptionFee] = await Promise.all([
-    prisma.setting.findMany({ where: { key: { in: Object.keys(defaultClubSettings) } }, select: { key: true, value: true } }),
-    prisma.feeSetting.findFirst({ where: { type: 'SUBSCRIPTION', effectiveFrom: { lte: new Date() } }, orderBy: [{ effectiveFrom: 'desc' }, { id: 'desc' }], select: { billingPeriod: true } }),
-  ])
+  const [rows, subscriptionFee] = await settingsRepository.getClubSettings()
   const values = new Map(rows.map((row) => [row.key, row.value]))
   const numberValue = (key: 'attendanceThreshold' | 'absenceDeadlineHours' | 'graceDays') => {
     const raw = values.get(key)

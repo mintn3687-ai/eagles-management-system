@@ -21,7 +21,7 @@ import {
   getProductionDetail,
   listAvailableRehearsals,
   listCurrentActiveMembers,
-} from '@/modules/productions/service'
+} from '@/modules/productions/read-service'
 
 export default async function ProductionDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await pagePermission('productions:manage')

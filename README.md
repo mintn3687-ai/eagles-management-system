@@ -68,6 +68,9 @@ commit environment files.
 - Africa/Nairobi timezone handling
 - Money stored as whole Kenya shillings
 - Index optimization for common queries
+- Existing records receive creation/update timestamps through an additive migration; existing finance amounts remain whole KES integers.
+
+Apply the `202610230004_model_timestamps` migration with `npm run db:migrate`.
 
 ## Phase 1: Seasons and Member History
 
@@ -200,7 +203,23 @@ npm run start
 
 ## Project Notes
 
-The project is being extended incrementally. Existing modules remain in place while new work uses feature modules under `src/modules/` with schemas, services, repositories, and thin server actions.
+The project is being extended incrementally. New feature work uses `src/modules/<feature>/` with validation schemas, business services, Prisma repositories, and thin server actions. Pages and components call server actions or read services rather than Prisma directly. Existing `src/lib/` feature services are migrated gradually to avoid breaking established workflows.
+
+## Architecture Rules
+
+Use these rules as the default standard for all code in the repository:
+
+- App routes may call service functions.
+- Services may call repositories.
+- Repositories may call Prisma.
+- Utilities should avoid database access unless they are truly shared, non-domain helpers.
+- Components should not call Prisma directly and should not contain business logic.
+- Each feature module should expose a narrow public API built around repository/service boundaries.
+- Permission and access checks should be centralized rather than repeated across routes, components, and services.
+- Keep `src/lib/` focused on cross-cutting utilities like dates, validation, formatting, auth helpers, and generic permission primitives.
+- Prefer thin route orchestration and domain logic inside the owning module.
+
+This keeps the architecture consistent as the project grows and prevents new logic from reintroducing legacy patterns.
 
 ## License
 

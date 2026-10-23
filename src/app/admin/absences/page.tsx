@@ -1,6 +1,7 @@
 import Link from 'next/link'
-import { pageUser } from '@/lib/page-access'
-import { listAbsences, countPendingAbsences } from '@/lib/absences/service'
+import { pagePermission } from '@/lib/page-access'
+import { listAbsences, countPendingAbsences } from '@/modules/absences/service'
+import { absenceListSchema } from '@/modules/absences/schema'
 import { AbsenceFiltersComponent } from '@/components/absences/filters'
 import { AbsenceList } from '@/components/absences/list'
 
@@ -9,16 +10,9 @@ export type SearchParams = {
 }
 
 export default async function AbsencesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
-  await pageUser('COMMITTEE')
+  await pagePermission('absences:manage')
   const params = await searchParams
-  const pageNum = Number(params.page ?? '1')
-  const filters = {
-    page: pageNum,
-    rehearsalId: params.rehearsalId ?? '',
-    memberId: params.memberId ?? '',
-    status: (params.status ?? '') as '' | 'ABSENT' | 'NO_RESPONSE',
-    month: params.month ?? '',
-  }
+  const filters = absenceListSchema.parse(params)
   const { records, total, page } = await listAbsences(filters)
   const pendingCount = await countPendingAbsences()
   return <div className="space-y-6">

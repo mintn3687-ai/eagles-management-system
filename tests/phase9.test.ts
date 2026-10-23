@@ -46,7 +46,10 @@ const routes = [
 const roles = ['MEMBER', 'COMMITTEE', 'SUPER_ADMIN'] as const
 const pagePermissions: Record<string, string> = {
   '/admin/members/[id]': 'members:read',
+  '/admin/absences': 'absences:manage',
   '/admin/rollover': 'seasons:manage',
+  '/admin/settings': 'settings:manage',
+  '/admin/team': 'team:manage',
   '/admin/meetings': 'meetings:manage',
   '/admin/meetings/[id]': 'meetings:manage',
   '/member/meetings': 'meetings:read',

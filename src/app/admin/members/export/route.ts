@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/db'
 import { AccessError, requireRole } from '@/lib/permissions'
 import { memberListSchema } from '@/lib/validation/members'
 import { memberWhere, memberOrder } from '@/lib/members/query'
 import { CSV_COLUMNS, csvLine } from '@/lib/members/csv'
 import { nairobiDateKey } from '@/lib/dates'
+import { adminExportRepository } from '@/modules/admin/export-repository'
 
 export async function GET(request: Request) {
   try {
@@ -19,10 +19,7 @@ export async function GET(request: Request) {
       async pull(controller) {
         try {
           if (!started) { controller.enqueue(encoder.encode('\uFEFF' + csvLine([...CSV_COLUMNS]))); started = true }
-          const members = await prisma.member.findMany({ where: memberWhere(filters), orderBy: memberOrder(filters),
-            select: { id: true, fullName: true, phone: true, email: true, studentRegNo: true },
-            take: 200, ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-          })
+          const members = await adminExportRepository.memberCsvPage(memberWhere(filters), memberOrder(filters), cursor, 200)
           if (members.length) {
             controller.enqueue(encoder.encode(members.map((m) => csvLine([m.fullName, m.phone, m.email, m.studentRegNo ?? ''])).join('')))
             cursor = members.at(-1)!.id

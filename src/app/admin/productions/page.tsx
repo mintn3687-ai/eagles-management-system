@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { pagePermission } from '@/lib/page-access'
 import { formatNairobiDate, nairobiDateKey } from '@/lib/dates'
 import { AssetForm, AssetMovementForms, ProductionCreateForm } from '@/components/productions/production-forms'
-import { listAssets, listCurrentActiveMembers, listProductions } from '@/modules/productions/service'
+import { listAssets, listCurrentActiveMembers, listProductions } from '@/modules/productions/read-service'
 
 export default async function ProductionsPage() {
   await pagePermission('productions:manage')

@@ -30,12 +30,12 @@ import {
   createCallSheet,
   createProduction,
   createProductionTask,
-  linkRehearsal,
   ProductionServiceError,
   scheduleShow,
   transitionProduction,
   updateProductionTaskStatus,
 } from './service'
+import { linkRehearsal } from './rehearsal-link-service'
 
 export type ProductionActionState = { success?: boolean; message?: string; error?: string }
 
