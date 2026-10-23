@@ -2,9 +2,9 @@ import type { MetadataRoute } from 'next'
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Eagles Drama Club Register',
-    short_name: 'Eagles Register',
-    description: 'The members-only register for Eagles Drama Club.',
+    name: 'Eagles Drama Club Management System',
+    short_name: 'Eagles Management',
+    description: 'The management system for Eagles Drama Club.',
     start_url: '/',
     scope: '/',
     display: 'standalone',
