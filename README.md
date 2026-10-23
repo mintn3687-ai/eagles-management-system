@@ -33,6 +33,16 @@ Mobile-first web app for managing drama club members, attendance, and payments i
 5. Run `npm run db:seed` to populate with sample data
 6. Run `npm run dev` to start the development server
 
+## Installable app
+
+The production site can be installed from a supported mobile or desktop browser. It uses a web app manifest, home-screen icons, and standalone display mode. The service worker is registered only in production.
+
+For privacy, the service worker does not cache application pages, sign-in routes, API/auth endpoints, or personalized responses. It caches only the static offline page and icons, plus Next.js build assets explicitly marked public and immutable. When offline, opening a page shows a basic offline message; member data is not available offline.
+
+To check locally, run `npm run build` and `npm run start`, then open the site in a browser and inspect **Application → Manifest** and **Application → Service Workers** in DevTools. Production behavior requires HTTPS. To check the offline fallback, enable DevTools’ offline network mode and navigate to a page; check **Application → Cache Storage** to confirm no application pages or API responses are stored.
+
+No new Vercel environment variables or database migrations are required.
+
 ### Recovering a Super Admin password
 
 If you have authorized database access but cannot sign in as a Super Admin, run
