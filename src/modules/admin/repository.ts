@@ -80,11 +80,23 @@ export const adminRepository = {
     where: { id },
     select: { id: true, title: true, date: true, startTime: true, endTime: true, venue: true, status: true, checkInCode: true, createdBy: { select: { name: true } } },
   }),
-  activeMemberCount: () => prisma.member.count({ where: { status: 'ACTIVE' } }),
-  activeMembersForRehearsal: (rehearsalId: string, skip: number, take: number) => prisma.member.findMany({
-    where: { status: 'ACTIVE' },
+  attendanceSheetMemberCount: (rehearsalId: string) => prisma.member.count({
+    where: {
+      OR: [
+        { status: 'ACTIVE' },
+        { rehearsals: { some: { rehearsalId } } },
+      ],
+    },
+  }),
+  attendanceSheetMembers: (rehearsalId: string, skip: number, take: number) => prisma.member.findMany({
+    where: {
+      OR: [
+        { status: 'ACTIVE' },
+        { rehearsals: { some: { rehearsalId } } },
+      ],
+    },
     select: {
-      id: true, fullName: true, phone: true, joinedAt: true,
+      id: true, fullName: true, phone: true, joinedAt: true, status: true,
       rehearsals: { where: { rehearsalId }, select: { id: true, status: true, markedBy: true, reason: true, reviewStatus: true } },
     },
     orderBy: { fullName: 'asc' },

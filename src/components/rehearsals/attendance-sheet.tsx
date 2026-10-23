@@ -4,7 +4,7 @@ import { useActionState } from 'react'
 import { setManualAttendanceAction } from '@/app/admin/rehearsals/actions'
 import { SubmitButton } from '@/components/submit-button'
 import Link from 'next/link'
-import type { RehearsalStatus } from '@prisma/client'
+import type { MemberStatus, RehearsalStatus } from '@prisma/client'
 
 type Rehearsal = {
   id: string; title: string; date: Date; startTime: string; endTime: string
@@ -12,33 +12,32 @@ type Rehearsal = {
 }
 
 type Member = {
-  id: string; fullName: string; phone: string; joinedAt: Date
+  id: string; fullName: string; phone: string; joinedAt: Date; status: MemberStatus
   rehearsals: { id: string; status: 'PRESENT' | 'ABSENT' | 'NO_RESPONSE'; markedBy: 'SELF' | 'COMMITTEE'; reason: string | null; reviewStatus: 'NONE' | 'PENDING' | 'EXCUSED' | 'UNEXCUSED' }[]
 }
 
-export function AttendanceSheet({ rehearsal, members, totalActive, page, pageCount }: { rehearsal: Rehearsal; members: Member[]; totalActive: number; page: number; pageCount: number }) {
+export function AttendanceSheet({ rehearsal, members, totalMembers, page, pageCount }: { rehearsal: Rehearsal; members: Member[]; totalMembers: number; page: number; pageCount: number }) {
   const [state, action] = useActionState(setManualAttendanceAction, {})
-  const activeMembers = members
   return <section className="card">
     <h2>Attendance sheet</h2>
     {state.error && <p role="alert" className="error">{state.error}</p>}
     {state.success && <p role="status">Attendance saved.</p>}
-    <p className="mb-4 text-sm text-slate-500">{totalActive} active members · Page {page} of {pageCount}.</p>
+    <p className="mb-4 text-sm text-slate-500">{totalMembers} members · Page {page} of {pageCount}.</p>
     <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
       <table className="w-full min-w-[600px] text-left text-sm">
         <thead className="bg-stone-100">
           <tr>{['Member', 'Phone', 'Attendance', 'Marked by', 'Review', ''].map((h) => <th className="p-3" key={h}>{h || ' '}</th>)}</tr>
         </thead>
         <tbody>
-          {activeMembers.map((m) => (
+          {members.map((m) => (
             <tr className="border-t" key={m.id}>
-              <td className="p-3">{m.fullName}</td>
+              <td className="p-3">{m.fullName}{m.status !== 'ACTIVE' && <span className="block text-xs text-slate-500">Not currently active</span>}</td>
               <td className="p-3">{m.phone}</td>
               <td className="p-3">{m.rehearsals[0]?.status.replaceAll('_', ' ') ?? 'No response'}</td>
               <td className="p-3">{m.rehearsals[0]?.markedBy ?? '—'}</td>
               <td className="p-3">{m.rehearsals[0]?.reviewStatus.replace('_', ' ') ?? '—'}</td>
               <td className="p-3">
-                <form action={action} className="flex items-center gap-2">
+                {m.status === 'ACTIVE' && <form action={action} className="flex items-center gap-2">
                   <input type="hidden" name="rehearsalId" value={rehearsal.id} />
                   <input type="hidden" name="memberId" value={m.id} />
                   <select className="input h-auto w-24 text-sm" name="status">
@@ -47,11 +46,11 @@ export function AttendanceSheet({ rehearsal, members, totalActive, page, pageCou
                   </select>
                   <input name="note" className="input" aria-label="Correction note" placeholder="Note required for no response to present" maxLength={1000} />
                   <SubmitButton>Save</SubmitButton>
-                </form>
+                </form>}
               </td>
             </tr>
           ))}
-          {!activeMembers.length && <tr><td className="p-6" colSpan={6}>No active members for this rehearsal.</td></tr>}
+          {!members.length && <tr><td className="p-6" colSpan={6}>No active members or recorded attendance for this rehearsal.</td></tr>}
         </tbody>
       </table>
     </div>

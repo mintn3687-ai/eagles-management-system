@@ -20,10 +20,10 @@ export default async function RehearsalDetailPage({ params, searchParams }: { pa
   const rehearsal = await adminReadService.rehearsal(parsed.data)
   if (!rehearsal) notFound()
   const requestedPage = pageSchema.parse((await searchParams).page ?? '1')
-  const totalActive = await adminReadService.activeMemberCount()
-  const pageCount = Math.max(1, Math.ceil(totalActive / PAGE_SIZE))
+  const totalMembers = await adminReadService.attendanceSheetMemberCount(rehearsal.id)
+  const pageCount = Math.max(1, Math.ceil(totalMembers / PAGE_SIZE))
   const page = Math.min(requestedPage, pageCount)
-  const members = await adminReadService.activeMembersForRehearsal(rehearsal.id, page, PAGE_SIZE)
+  const members = await adminReadService.attendanceSheetMembers(rehearsal.id, page, PAGE_SIZE)
   return <div className="space-y-6">
     <div>
       <Link className="inline-flex min-h-11 items-center underline" href="/admin/rehearsals">← Rehearsals</Link>
@@ -35,6 +35,6 @@ export default async function RehearsalDetailPage({ params, searchParams }: { pa
     {rehearsal.status === 'OPEN' && <SessionControls rehearsalId={rehearsal.id} state="open" checkInCode={rehearsal.checkInCode} />}
     {rehearsal.status === 'SCHEDULED' && <EditRehearsalForm rehearsal={rehearsal} />}
     {rehearsal.status !== 'CANCELLED' && <CancelRehearsalForm rehearsalId={rehearsal.id} />}
-    <AttendanceSheet rehearsal={rehearsal} members={members} totalActive={totalActive} page={page} pageCount={pageCount} />
+    <AttendanceSheet rehearsal={rehearsal} members={members} totalMembers={totalMembers} page={page} pageCount={pageCount} />
   </div>
 }

@@ -19,8 +19,8 @@ export const adminReadService = {
   paymentReceipt: adminRepository.paymentReceipt,
   analyticsMember: adminRepository.analyticsMember,
   rehearsal: adminRepository.rehearsal,
-  activeMemberCount: adminRepository.activeMemberCount,
-  activeMembersForRehearsal: (rehearsalId: string, page: number, pageSize: number) =>
-    adminRepository.activeMembersForRehearsal(rehearsalId, (page - 1) * pageSize, pageSize),
+  attendanceSheetMemberCount: adminRepository.attendanceSheetMemberCount,
+  attendanceSheetMembers: (rehearsalId: string, page: number, pageSize: number) =>
+    adminRepository.attendanceSheetMembers(rehearsalId, (page - 1) * pageSize, pageSize),
   memberSubscriptionPayment: adminRepository.memberSubscriptionPayment,
 }
