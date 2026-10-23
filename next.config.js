@@ -26,7 +26,18 @@ const nextConfig = {
       { key: 'Content-Security-Policy', value: contentSecurityPolicy },
       ...(!development ? [{ key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' }] : []),
     ]
-    return [{ source: '/:path*', headers }]
+    return [
+      { source: '/:path*', headers },
+      {
+        source: '/sw.js',
+        headers: [
+          { key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' },
+          ...(process.env.VERCEL_GIT_COMMIT_SHA
+            ? [{ key: 'X-PWA-Build-Revision', value: process.env.VERCEL_GIT_COMMIT_SHA }]
+            : []),
+        ],
+      },
+    ]
   },
 }
 export default nextConfig
