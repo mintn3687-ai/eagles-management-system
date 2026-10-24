@@ -49,12 +49,10 @@ export const festivalDocumentStorage = {
   createUploadUrl: (input: {
     storageKey: string
     contentType: string
-    sizeBytes: number
   }) => getSignedUrl(storageClient(), new PutObjectCommand({
     Bucket: storageBucket(),
     Key: input.storageKey,
     ContentType: input.contentType,
-    ContentLength: input.sizeBytes,
   }), { expiresIn: uploadUrlExpiresSeconds }),
 
   headObject: async (storageKey: string) => {

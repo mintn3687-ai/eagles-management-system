@@ -116,7 +116,6 @@ describe('festival document validation and workflows', () => {
     expect(result.uploadUrl).toContain('storage.example.test')
     expect(mocks.createUploadUrl).toHaveBeenCalledWith(expect.objectContaining({
       contentType: 'application/pdf',
-      sizeBytes: 1234,
     }))
     expect(mocks.createFestivalDocument).toHaveBeenCalledWith({}, expect.objectContaining({
       festivalId: 'festival-id',
