@@ -61,16 +61,61 @@
 - Verification passed locally: `npx vitest run tests/push-service.test.ts tests/push-reminder-window.test.ts` (2 files, 3 tests), `npm run typecheck`, and `npm run build`.
 - Preview checks remain outstanding: configure Preview-only test Firebase values and test devices, enable notifications from a signed-in account, confirm send/receive, disable and confirm no further delivery, and avoid using production targets or user subscriptions.
 
-## Phase 5: Testing and launch — NOT STARTED
+## Phase 5: Testing and launch — IN PROGRESS
 
-- Provide a Lighthouse PWA checklist and test plans for Android Chrome and iPhone Safari.
-- Check login, logout, 24-hour session expiry, rehearsal attendance, uploads, and payments.
-- Explain how to bring newer `main` commits into `pwa-work`, test the combined code on a Preview deployment, and safely merge only after approval.
-- Provide a production rollback plan.
+### Automated and read-only checks completed
+
+- `npm test` passed: 167 Vitest tests and 8 helper tests. No database integration script was run.
+- `npm run typecheck` passed.
+- `npm run build` passed.
+- Production `https://eagles-drama-club-register.vercel.app/manifest.webmanifest` returned HTTP 200.
+- Production `/sw.js` returned HTTP 200, `Cache-Control: no-cache, no-store, must-revalidate`, and `X-PWA-Build-Revision` matching the deployed `main` commit at the time of the check.
+- No code or database changes were made for Phase 5.
+
+### Lighthouse and browser checklist
+
+- Run Chrome Lighthouse against the production or a Vercel Preview URL on mobile and desktop. Review Performance, Accessibility, Best Practices, and SEO; Lighthouse versions may not expose a separate PWA category.
+- In DevTools → Application → Manifest, verify app name/short name, start URL, theme/background colors, 192×192 and 512×512 icons, and the maskable icon.
+- In DevTools → Application → Service Workers, verify the root-scoped worker is active, uses the current Vercel commit revision, and updates after a new deployment.
+- Confirm the app can be installed on supported browsers and that the install UI stays hidden until interaction and after standalone installation.
+- Enable offline mode and navigate to an uncached page: expect only the generic offline page, not a cached application route.
+- Inspect Cache Storage: no navigations, `/api/*`, `/api/auth/*`, `/login`, `/member/*`, `/admin/*`, or user-specific responses should be cached.
+- Review browser console/network output for failed service-worker registration, manifest/icon errors, CSP violations, or runtime exceptions.
+- Check responsive layout, keyboard navigation, visible focus, labels, and contrast on the install UI and offline page.
+
+### Android Chrome and iPhone Safari device plan
+
+- Android Chrome: use a normal browser profile (not Incognito); verify no install control on first load, interact, verify the control appears only when the browser provides `beforeinstallprompt`, accept installation, launch standalone, and confirm the install control is hidden. Uninstall and repeat as needed.
+- iPhone/iPad: use Safari on iOS/iPadOS 16.4 or later; first verify the hint is hidden on initial load, interact to reveal it, expand instructions, use Share → Add to Home Screen, launch from the Home Screen, and confirm standalone mode hides the hint. Push requires the installed Home Screen app.
+- Repeat one online-to-offline navigation check on each device and confirm private pages do not appear from cache.
+- Physical-device checks have not been performed in this session.
+
+### Authenticated feature regression plan
+
+Use dedicated test accounts, a planned expiry window, and a verified isolated Preview database. Preview can share Production; do not assume it is safe for test writes.
+
+- Login: valid credentials reach the correct signed-in area; invalid credentials are rejected without exposing sensitive details.
+- Logout: sign out and verify protected routes redirect to login; the old session must not restore access.
+- 24-hour session: record login time, verify the session remains valid before 24 hours, then verify a request after the 24-hour JWT maximum age requires login again. Do not shorten production session settings to accelerate this check.
+- Rehearsal attendance: use a disposable rehearsal and test member; mark/check attendance and confirm the saved status appears in the member and staff views.
+- CSV upload/import: the app's upload surface is member CSV import. Use a small, non-sensitive test CSV; verify preview/validation and import result in the isolated test database, including duplicate/invalid rows. Do not upload real member data to Preview.
+- Payments: record and inspect a clearly identified test payment only in the isolated test database; verify amount, member, date, and ledger/receipt, then clean up through supported application workflows if available.
+- Push: use Preview-specific Firebase project credentials, test account/subscription, and test devices. Confirm opt-in, delivery, opt-out, and no further delivery. Do not send to Production subscribers.
+- These authenticated and device-level checks have not been performed here. No database writes or notifications were sent during this phase.
+
+### Safe branch promotion and rollback
+
+- Before proposing a release, refresh remote refs and bring current `main` into the feature branch: `git fetch origin`, `git switch pwa-work`, then `git merge origin/main`.
+- Run `npm test`, `npm run typecheck`, and `npm run build` on the combined branch. Push only `pwa-work`, inspect its Vercel Preview, and complete the device/authenticated checks above before opening a PR to `main`.
+- Review the PR file diff and Preview deployment. Merge only after explicit user approval; Vercel should deploy the resulting `main` commit. Confirm the deployment status and check the production site and PWA endpoints afterward.
+- For an application-only regression, use Vercel to promote the previous known-good Production deployment for immediate rollback, then create a reviewed revert PR for the offending merge commit so Git and Production agree. Do not force-push or reset shared branches.
+- A database migration cannot be undone by rolling back app code. Back up/branch the database and prepare a separately reviewed forward-fix or recovery plan before any schema/data change. Phase 5 made no database changes.
 
 ## Open issues
 
 - Phase 2 was verified on the Vercel Preview.
 - Phase 3 is deployed to Production; Android Chrome and iPhone Safari device checks remain outstanding.
 - Phase 4 reuses the existing Firebase implementation; Preview testing and a decision about database foreign-key enforcement remain outstanding.
+- Phase 5 automated tests, typecheck/build, and public PWA endpoint checks passed. Manual Lighthouse/device/authenticated checks remain outstanding and require safe test accounts/devices and confirmation that Preview uses an isolated database.
+- At the time this progress record was updated, remote `main` had one newer commit than local `pwa-work`; refresh and merge `origin/main` into `pwa-work` before the next release PR. Do not merge to `main` without explicit approval.
 - Stop after each phase and wait for the user to say “continue”.
