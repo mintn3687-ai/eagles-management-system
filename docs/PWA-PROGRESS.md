@@ -34,7 +34,7 @@
 - Preview test: deploy the `pwa-work` branch to Vercel Preview; confirm `/sw.js` returns `Cache-Control: no-cache, no-store, must-revalidate` and `X-PWA-Build-Revision` with the preview commit SHA; in browser DevTools check the worker is active, then use offline mode to verify the offline fallback. Verify `/member/*`, `/admin/*`, `/login`, and `/api/*` are never served from Cache Storage.
 - Rollback for this documentation-only change: `git revert <progress-record-commit>` on `pwa-work`. The Phase 2 source implementation predates this change and is not reverted by that command.
 
-## Phase 3: Install experience — IMPLEMENTED; local checks passed
+## Phase 3: Install experience — PREVIEW DEPLOYED
 
 - The small install component provides an Android `beforeinstallprompt` button and an iPhone Safari “Add to Home Screen” hint.
 - Show the prompt only after user interaction; hide both install affordances when the app is already installed in standalone display mode.
@@ -42,16 +42,23 @@
 - The existing component was already mounted by the root layout. It now waits for the first pointer or keyboard interaction before showing either install affordance; no layout change was needed.
 - Local validation: `npm run typecheck` passed and `npm run build` passed.
 - Preview test: on Android Chrome, confirm the install button stays hidden on initial load, appears after a tap or key press when install is available, launches the browser install prompt, and stays hidden when installed. On iPhone Safari, confirm the Add to Home Screen hint stays hidden on initial load, appears after interaction, expands to show instructions, and stays hidden when launched in standalone mode.
+- The `pwa-work` commit `1585a69` was pushed and Vercel reported its Preview deployment completed. Physical-device behavior checks remain outstanding.
 - Rollback: `git revert <phase-3-commit>` on `pwa-work`.
 
-## Phase 4: Push notifications — NOT STARTED
+## Phase 4: Push notifications — EXISTING FIREBASE IMPLEMENTATION REUSED
 
-- First recommend Firebase Cloud Messaging or OneSignal and explain the trade-offs; wait for the user's choice before installing anything.
-- Any subscription storage must use a new Prisma model linked to the existing `User` by ID. Do not alter existing models.
-- Show migration SQL and wait for approval before running it against any database. Warn that Preview may share the production database before any write.
-- Request notification permission only after an explicit button tap and only for logged-in users. Send only to opted-in users and provide a way to turn notifications off.
-- Explain that iPhone web push requires installing the app to the Home Screen and iOS 16.4 or later.
-- List required environment variables and whether each belongs in Preview, Production, or both.
+- The user selected Firebase Cloud Messaging. The app already has Firebase web/admin dependencies, authenticated opt-in UI, subscription endpoints, a committee announcement route, rehearsal reminders, and `PushSubscription` and `PushDelivery` Prisma models. No packages, routes, models, migrations, or other implementation files were added or changed for this phase.
+- The existing opt-in UI is displayed on authenticated member and admin home pages. It requests browser notification permission only in response to the user's button action, supports turning notifications off, and requires an iPhone/iPad app to be installed to the Home Screen before enabling push.
+- Sending targets active, consented user accounts with saved subscriptions. Notifications may be delivered while the account is signed out; notification text is generic and directs the user to sign in for details.
+- `PushSubscription.userId` is a scalar ID with an index, but the current Prisma schema and existing migration do not enforce a relation/foreign key to `User`. The existing migration creates `PushSubscription` and `PushDelivery` only. A migration to add referential integrity was not authorized or run. Preview may share the production database; do not run any migration or notification test that writes/sends without confirming the target environment and using test devices.
+- iPhone/iPad web push requires iOS/iPadOS 16.4 or later and the app added to the Home Screen.
+- Existing documented Vercel environment variables:
+  - Set `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`, `NEXT_PUBLIC_FIREBASE_PROJECT_ID`, `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`, `NEXT_PUBLIC_FIREBASE_APP_ID`, and `NEXT_PUBLIC_FIREBASE_VAPID_KEY` for both Preview and Production, using Firebase web configuration appropriate to each environment.
+  - Set `FIREBASE_SERVICE_ACCOUNT_JSON` as a server-only secret for Preview and Production. Use a test Firebase project/service account in Preview and the production service account in Production. Never expose it with a `NEXT_PUBLIC_` prefix.
+  - Set `CRON_SECRET` for Preview and Production as a long random server-only secret; use distinct values per environment. Vercel Cron runs only on Production; invoke Preview reminder tests manually and only with test data, Firebase project, and devices.
+  - Add each Preview and Production site domain to the corresponding Firebase authorized web domains.
+- Verification passed locally: `npx vitest run tests/push-service.test.ts tests/push-reminder-window.test.ts` (2 files, 3 tests), `npm run typecheck`, and `npm run build`.
+- Preview checks remain outstanding: configure Preview-only test Firebase values and test devices, enable notifications from a signed-in account, confirm send/receive, disable and confirm no further delivery, and avoid using production targets or user subscriptions.
 
 ## Phase 5: Testing and launch — NOT STARTED
 
@@ -63,5 +70,6 @@
 ## Open issues
 
 - Phase 2 was verified on the Vercel Preview.
-- Phase 3 Preview testing remains outstanding.
+- Phase 3 is deployed on Preview; Android Chrome and iPhone Safari device checks remain outstanding.
+- Phase 4 reuses the existing Firebase implementation; Preview testing and a decision about database foreign-key enforcement remain outstanding.
 - Stop after each phase and wait for the user to say “continue”.
