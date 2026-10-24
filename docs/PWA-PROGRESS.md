@@ -17,7 +17,7 @@
 - Verified on the Vercel preview.
 - Restore points: `bc002a1` (before review), `672dd33` (Phase 1 done).
 
-## Phase 2: Service worker — IMPLEMENTED; local checks passed
+## Phase 2: Service worker — VERIFIED
 
 - `public/sw.js` remains handwritten.
 - All paths in `PRECACHE_URLS` exist in `public/`: `/offline.html`, `/icon.svg`, `/icon-192.png`, `/icon-512.png`, `/maskable_icon_x512.png`, and `/apple-touch-icon.png`.
@@ -30,14 +30,19 @@
 - Phase 2 implementation was already present in the worktree; no service-worker, registration, Next.js config, or offline-page code was changed to complete this phase.
 - `npm run typecheck` passed.
 - `npm run build` passed.
+- Verified on the Vercel Preview.
 - Preview test: deploy the `pwa-work` branch to Vercel Preview; confirm `/sw.js` returns `Cache-Control: no-cache, no-store, must-revalidate` and `X-PWA-Build-Revision` with the preview commit SHA; in browser DevTools check the worker is active, then use offline mode to verify the offline fallback. Verify `/member/*`, `/admin/*`, `/login`, and `/api/*` are never served from Cache Storage.
 - Rollback for this documentation-only change: `git revert <progress-record-commit>` on `pwa-work`. The Phase 2 source implementation predates this change and is not reverted by that command.
 
-## Phase 3: Install experience — NOT STARTED
+## Phase 3: Install experience — IMPLEMENTED; local checks passed
 
-- Add a small install component with an Android `beforeinstallprompt` button and an iPhone Safari “Add to Home Screen” hint.
+- The small install component provides an Android `beforeinstallprompt` button and an iPhone Safari “Add to Home Screen” hint.
 - Show the prompt only after user interaction; hide both install affordances when the app is already installed in standalone display mode.
 - Do not restructure existing layouts or navigation.
+- The existing component was already mounted by the root layout. It now waits for the first pointer or keyboard interaction before showing either install affordance; no layout change was needed.
+- Local validation: `npm run typecheck` passed and `npm run build` passed.
+- Preview test: on Android Chrome, confirm the install button stays hidden on initial load, appears after a tap or key press when install is available, launches the browser install prompt, and stays hidden when installed. On iPhone Safari, confirm the Add to Home Screen hint stays hidden on initial load, appears after interaction, expands to show instructions, and stays hidden when launched in standalone mode.
+- Rollback: `git revert <phase-3-commit>` on `pwa-work`.
 
 ## Phase 4: Push notifications — NOT STARTED
 
@@ -57,5 +62,6 @@
 
 ## Open issues
 
-- Phase 2 code was already present and no implementation files needed changes in this session. Local typecheck and build passed; Vercel Preview verification remains outstanding.
+- Phase 2 was verified on the Vercel Preview.
+- Phase 3 Preview testing remains outstanding.
 - Stop after each phase and wait for the user to say “continue”.

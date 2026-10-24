@@ -20,9 +20,15 @@ export function InstallApp() {
   const [isIosSafariDevice, setIsIosSafariDevice] = useState(false)
   const [isInstalled, setIsInstalled] = useState(false)
   const [showIosInstructions, setShowIosInstructions] = useState(false)
+  const [hasInteracted, setHasInteracted] = useState(false)
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(display-mode: standalone)')
+    const handleInteraction = () => {
+      setHasInteracted(true)
+      window.removeEventListener('pointerdown', handleInteraction)
+      window.removeEventListener('keydown', handleInteraction)
+    }
     const updateInstalledState = () => {
       setIsInstalled(mediaQuery.matches || 'standalone' in navigator && navigator.standalone === true)
     }
@@ -38,17 +44,21 @@ export function InstallApp() {
     setIsIosSafariDevice(isIosSafari())
     updateInstalledState()
     mediaQuery.addEventListener('change', updateInstalledState)
+    window.addEventListener('pointerdown', handleInteraction)
+    window.addEventListener('keydown', handleInteraction)
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
     window.addEventListener('appinstalled', handleAppInstalled)
 
     return () => {
       mediaQuery.removeEventListener('change', updateInstalledState)
+      window.removeEventListener('pointerdown', handleInteraction)
+      window.removeEventListener('keydown', handleInteraction)
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
       window.removeEventListener('appinstalled', handleAppInstalled)
     }
   }, [])
 
-  if (isInstalled || (!installPrompt && !isIosSafariDevice)) return null
+  if (!hasInteracted || isInstalled || (!installPrompt && !isIosSafariDevice)) return null
 
   const install = async () => {
     if (!installPrompt) return
