@@ -1,12 +1,12 @@
 import { z } from 'zod'
-import { userIdSchema } from '@/lib/validation'
 
 const dateKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
   const date = new Date(`${value}T00:00:00Z`)
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
 }, 'Choose a valid date.')
 
-const optionalId = z.union([userIdSchema, z.literal('')]).default('')
+const financeIdSchema = z.string().trim().min(1).max(191)
+const optionalId = z.union([financeIdSchema, z.literal('')]).default('')
 const positiveAmount = z.number().int().safe().positive('Amount must be a positive whole number of KES.').max(2_147_483_647)
 const reference = z.string().trim().max(120).default('')
 
@@ -40,12 +40,12 @@ export const reimbursementRequestSchema = z.object({
 }).strict()
 
 export const reimbursementDecisionSchema = z.object({
-  reimbursementId: userIdSchema,
+  reimbursementId: financeIdSchema,
   decision: z.enum(['APPROVED', 'REJECTED']),
 }).strict()
 
 export const reimbursementPaySchema = z.object({
-  reimbursementId: userIdSchema,
+  reimbursementId: financeIdSchema,
   paymentReference: z.string().trim().min(1).max(120),
 }).strict()
 
@@ -70,14 +70,14 @@ export const contributionSchema = z.object({
 }).strict()
 
 export const ticketTypeSchema = z.object({
-  showDateId: userIdSchema,
+  showDateId: financeIdSchema,
   name: z.string().trim().min(2).max(80),
   price: z.number().int().safe().nonnegative().max(2_147_483_647),
   quantityAvailable: z.union([z.number().int().positive().safe().max(2_147_483_647), z.literal('')]),
 }).strict()
 
 export const ticketSaleSchema = z.object({
-  ticketTypeId: userIdSchema,
+  ticketTypeId: financeIdSchema,
   quantity: z.number().int().positive().max(1000),
   buyerName: z.string().trim().max(160).default(''),
   method: z.enum(['MPESA', 'CASH', 'OTHER']),
@@ -85,13 +85,13 @@ export const ticketSaleSchema = z.object({
 }).strict()
 
 export const ticketRefundSchema = z.object({
-  ticketSaleId: userIdSchema,
+  ticketSaleId: financeIdSchema,
   amount: positiveAmount,
   reason: z.string().trim().min(3).max(500),
 }).strict()
 
 export const guestEntrySchema = z.object({
-  showDateId: userIdSchema,
+  showDateId: financeIdSchema,
   ticketSaleId: optionalId,
   name: z.string().trim().min(2).max(160),
   note: z.string().trim().max(300).default(''),
@@ -104,7 +104,7 @@ export const reconciliationBatchSchema = z.object({
 }).strict()
 
 export const statementEntrySchema = z.object({
-  batchId: userIdSchema,
+  batchId: financeIdSchema,
   statementReference: z.string().trim().min(1).max(120),
   amount: positiveAmount,
   notes: z.string().trim().max(300).default(''),
