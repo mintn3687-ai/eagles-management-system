@@ -9,6 +9,7 @@ import {
 } from '../src/modules/finance/operations-rules'
 
 const id = 'c123456789012345678901234'
+const uuid = '123e4567-e89b-12d3-a456-426614174000'
 
 describe('finance validation and money rules', () => {
   it('accepts only positive whole-KES finance values and scoped budgets', () => {
@@ -18,6 +19,9 @@ describe('finance validation and money rules', () => {
     expect(budgetSchema.safeParse({
       seasonId: '', productionId: '', category: 'Costumes', amount: 1000, notes: '',
     }).success).toBe(false)
+    expect(budgetSchema.safeParse({
+      seasonId: '', productionId: uuid, category: 'Costumes', amount: 1000, notes: '',
+    }).success).toBe(true)
     expect(financeEntrySchema.safeParse({
       type: 'EXPENSE', seasonId: id, productionId: '', category: 'Travel', amount: 250,
       description: 'Transport receipts', receiptReference: 'RCPT-1', date: '2026-10-22',
@@ -34,6 +38,9 @@ describe('finance validation and money rules', () => {
     expect(() => calculateTicketTotal(1_000_000_000, 3)).toThrow(/database amount/)
     expect(ticketSaleSchema.safeParse({
       ticketTypeId: id, quantity: 2, buyerName: '', method: 'CASH', reference: '',
+    }).success).toBe(true)
+    expect(ticketSaleSchema.safeParse({
+      ticketTypeId: uuid, quantity: 2, buyerName: '', method: 'CASH', reference: '',
     }).success).toBe(true)
     expect(ticketTypeSchema.safeParse({
       showDateId: id, name: 'Standard', price: -1, quantityAvailable: '',
