@@ -40,6 +40,7 @@ function storageClient() {
   client = new S3Client({
     endpoint,
     region,
+    requestChecksumCalculation: 'WHEN_REQUIRED',
     credentials: { accessKeyId, secretAccessKey },
   })
   return client
