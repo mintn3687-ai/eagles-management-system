@@ -19,6 +19,7 @@ export const permissionRoles = {
   'elections:vote': 'MEMBER',
   'productions:manage': 'COMMITTEE',
   'productions:read': 'MEMBER',
+  'festivals:manage': 'COMMITTEE',
 } as const satisfies Record<string, UserRole>
 
 export type Permission = keyof typeof permissionRoles

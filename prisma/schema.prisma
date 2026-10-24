@@ -143,6 +143,14 @@ enum ProductionStatus {
   CANCELLED
 }
 
+enum FestivalStatus {
+  DRAFT
+  PLANNING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
 enum ProductionTaskStatus {
   OPEN
   IN_PROGRESS
@@ -1144,6 +1152,25 @@ model ReconciliationEntry {
 
   @@unique([batchId, statementReference])
   @@index([batchId, paymentId])
+}
+
+model Festival {
+  id          String         @id @default(cuid())
+  name        String
+  year        Int
+  organizer   String?
+  venue       String?
+  startDate   DateTime?      @db.Timestamp(3)
+  endDate     DateTime?      @db.Timestamp(3)
+  status      FestivalStatus @default(PLANNING)
+  notes       String?
+  createdById String
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([year, status, startDate])
+  @@index([name, year])
+  @@index([createdById])
 }
 
 model PushSubscription {
