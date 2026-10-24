@@ -34,7 +34,7 @@
 - Preview test: deploy the `pwa-work` branch to Vercel Preview; confirm `/sw.js` returns `Cache-Control: no-cache, no-store, must-revalidate` and `X-PWA-Build-Revision` with the preview commit SHA; in browser DevTools check the worker is active, then use offline mode to verify the offline fallback. Verify `/member/*`, `/admin/*`, `/login`, and `/api/*` are never served from Cache Storage.
 - Rollback for this documentation-only change: `git revert <progress-record-commit>` on `pwa-work`. The Phase 2 source implementation predates this change and is not reverted by that command.
 
-## Phase 3: Install experience — PREVIEW DEPLOYED
+## Phase 3: Install experience — PRODUCTION DEPLOYED
 
 - The small install component provides an Android `beforeinstallprompt` button and an iPhone Safari “Add to Home Screen” hint.
 - Show the prompt only after user interaction; hide both install affordances when the app is already installed in standalone display mode.
@@ -43,6 +43,7 @@
 - Local validation: `npm run typecheck` passed and `npm run build` passed.
 - Preview test: on Android Chrome, confirm the install button stays hidden on initial load, appears after a tap or key press when install is available, launches the browser install prompt, and stays hidden when installed. On iPhone Safari, confirm the Add to Home Screen hint stays hidden on initial load, appears after interaction, expands to show instructions, and stays hidden when launched in standalone mode.
 - The `pwa-work` commit `1585a69` was pushed and Vercel reported its Preview deployment completed. Physical-device behavior checks remain outstanding.
+- Merged to `main` in PR #6; Vercel reported the production deployment completed and the production site returned HTTP 200.
 - Rollback: `git revert <phase-3-commit>` on `pwa-work`.
 
 ## Phase 4: Push notifications — EXISTING FIREBASE IMPLEMENTATION REUSED
@@ -70,6 +71,6 @@
 ## Open issues
 
 - Phase 2 was verified on the Vercel Preview.
-- Phase 3 is deployed on Preview; Android Chrome and iPhone Safari device checks remain outstanding.
+- Phase 3 is deployed to Production; Android Chrome and iPhone Safari device checks remain outstanding.
 - Phase 4 reuses the existing Firebase implementation; Preview testing and a decision about database foreign-key enforcement remain outstanding.
 - Stop after each phase and wait for the user to say “continue”.
