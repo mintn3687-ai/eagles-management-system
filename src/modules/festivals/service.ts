@@ -478,7 +478,6 @@ export async function createFestivalDocumentUpload(input: FestivalDocumentUpload
   const uploadUrl = await festivalDocumentStorage.createUploadUrl({
     storageKey,
     contentType: input.contentType,
-    sizeBytes: input.sizeBytes,
   })
 
   const document = await festivalsRepository.transaction(async (tx) => {
