@@ -3,17 +3,26 @@ import { Prisma } from '@prisma/client'
 import { writeAuditLog } from '@/lib/audit'
 import { parseNairobiDate } from '@/lib/dates'
 import { festivalsRepository } from './repository'
-import { canTransitionEntry, summarizeFestivalBudget } from './rules'
+import {
+  canTransitionEntry,
+  FestivalApprovalRuleError,
+  summarizeFestivalBudget,
+  validateBudgetApprovalAmount,
+} from './rules'
 import type { FestivalEntryStatus } from './rules'
 import type {
   EntryCategoryInput,
   EntryCategoryUpdateInput,
   FestivalBudgetItemInput,
+  FestivalBudgetItemUpdateInput,
+  FestivalApprovalDecisionInput,
+  FestivalBudgetApprovalSubmitInput,
   FestivalCreateInput,
   FestivalEntryCreateInput,
   FestivalInvitationCreateInput,
   FestivalFinanceLinkInput,
   FestivalFinanceUnlinkInput,
+  FestivalPlanApprovalSubmitInput,
   FestivalUpdateInput,
 } from './schema'
 
@@ -38,6 +47,18 @@ function mapFinanceLinkError(error: unknown): never {
     throw new FestivalServiceError('This finance entry is already linked to a festival budget item.')
   }
   throw error
+}
+
+function mapApprovalError(error: unknown): never {
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+    throw new FestivalServiceError('An approval request already exists for this festival plan or budget item.')
+  }
+  if (error instanceof FestivalApprovalRuleError) throw new FestivalServiceError(error.message)
+  throw error
+}
+
+function targetKey(type: 'PLAN' | 'BUDGET', id: string) {
+  return `${type}:${id}`
 }
 
 function dateAtNairobi(date: string | null) {
@@ -85,16 +106,51 @@ export async function updateFestival(input: FestivalUpdateInput, actorId: string
   return festivalsRepository.transaction(async (tx) => {
     const previous = await festivalsRepository.findForUpdate(tx, input.festivalId)
     if (!previous) throw new FestivalServiceError('Festival not found.')
-
-    const festival = await festivalsRepository.update(tx, input.festivalId, {
+    const nextDates = dateFields(input)
+    const next = {
       name: input.name,
       year: input.year,
       organizer: input.organizer || null,
       venue: input.venue || null,
-      ...dateFields(input),
+      ...nextDates,
       status: input.status,
       notes: input.notes || null,
-    })
+    }
+    const planChanged = previous.name !== next.name
+      || previous.year !== next.year
+      || previous.organizer !== next.organizer
+      || previous.venue !== next.venue
+      || previous.startDate?.getTime() !== next.startDate?.getTime()
+      || previous.endDate?.getTime() !== next.endDate?.getTime()
+      || previous.status !== next.status
+      || previous.notes !== next.notes
+    if (!planChanged) return { festival: previous, planResubmitted: false }
+
+    const planApprovalKey = targetKey('PLAN', input.festivalId)
+    const priorApproval = await festivalsRepository.findApprovalByTargetKey(tx, planApprovalKey)
+    const planResubmitted = priorApproval?.status === 'APPROVED'
+
+    const festival = await festivalsRepository.update(tx, input.festivalId, next)
+    if (planResubmitted) {
+      const submittedAt = new Date()
+      const reset = await festivalsRepository.resubmitApprovedApproval(tx, planApprovalKey, {
+        status: 'PENDING',
+        submittedById: actorId,
+        submittedAt,
+        approvedAmount: null,
+        decidedById: null,
+        decidedAt: null,
+        decisionReason: null,
+      })
+      if (!reset.count) throw new FestivalServiceError('The plan approval changed while its details were being edited.')
+      await writeAuditLog(tx, {
+        actorId,
+        action: 'FESTIVAL_PLAN_RESUBMITTED',
+        entity: 'Festival',
+        entityId: festival.id,
+        details: { submittedAt: submittedAt.toISOString(), reason: 'Approved festival details changed.' },
+      })
+    }
     await writeAuditLog(tx, {
       actorId,
       action: 'FESTIVAL_UPDATED',
@@ -105,7 +161,7 @@ export async function updateFestival(input: FestivalUpdateInput, actorId: string
         to: { name: festival.name, year: festival.year, status: festival.status },
       },
     })
-    return festival
+    return { festival, planResubmitted }
   }).catch(mapError)
 }
 
@@ -266,7 +322,10 @@ export async function getFestivalPlanning(festivalId: string) {
   const planning = await festivalsRepository.planningData(festivalId)
   return {
     ...planning,
-    budgetSummary: summarizeFestivalBudget(planning.budgetItems),
+    budgetSummary: summarizeFestivalBudget(planning.budgetItems.map((item) => ({
+      ...item,
+      approvedAmount: item.approval?.status === 'APPROVED' ? item.approval.approvedAmount : null,
+    }))),
   }
 }
 
@@ -292,6 +351,205 @@ export async function createFestivalBudgetItem(input: FestivalBudgetItemInput, a
     })
     return item
   }).catch(mapError)
+}
+
+export async function updateFestivalBudgetItem(input: FestivalBudgetItemUpdateInput, actorId: string) {
+  return festivalsRepository.transaction(async (tx) => {
+    const previous = await festivalsRepository.findBudgetItem(tx, input.festivalId, input.budgetItemId)
+    if (!previous) throw new FestivalServiceError('Budget item not found for this festival.')
+    const next = {
+      type: input.type,
+      category: input.category,
+      plannedAmount: input.plannedAmount,
+      notes: input.notes || null,
+    }
+    const itemChanged = previous.type !== next.type
+      || previous.category !== next.category
+      || previous.plannedAmount !== next.plannedAmount
+      || previous.notes !== next.notes
+    if (!itemChanged) return { updated: false, approvalResubmitted: false }
+    if (previous.type !== input.type && await festivalsRepository.countFinanceLinksForBudgetItem(tx, previous.id)) {
+      throw new FestivalServiceError('The income/expense type cannot change while finance entries are linked.')
+    }
+    const updated = await festivalsRepository.updateBudgetItem(tx, input.festivalId, input.budgetItemId, {
+      ...next,
+    })
+    if (!updated.count) throw new FestivalServiceError('Budget item not found for this festival.')
+
+    const approvalKey = targetKey('BUDGET', input.budgetItemId)
+    const approval = await festivalsRepository.findApprovalByTargetKey(tx, approvalKey)
+    let approvalResubmitted = false
+    if (approval?.status === 'APPROVED') {
+      const submittedAt = new Date()
+      const reset = await festivalsRepository.resubmitApprovedApproval(tx, approvalKey, {
+        status: 'PENDING',
+        requestedAmount: input.plannedAmount,
+        approvedAmount: null,
+        submittedById: actorId,
+        submittedAt,
+        decidedById: null,
+        decidedAt: null,
+        decisionReason: null,
+      })
+      if (!reset.count) throw new FestivalServiceError('The budget approval changed while this item was being edited.')
+      approvalResubmitted = true
+    } else if (approval?.status === 'PENDING') {
+      await festivalsRepository.updatePendingApprovalAmount(tx, approvalKey, input.plannedAmount)
+    }
+
+    await writeAuditLog(tx, {
+      actorId,
+      action: 'FESTIVAL_BUDGET_ITEM_UPDATED',
+      entity: 'FestivalBudgetItem',
+      entityId: input.budgetItemId,
+      details: {
+        festivalId: input.festivalId,
+        from: { type: previous.type, category: previous.category, plannedAmount: previous.plannedAmount },
+        to: { type: input.type, category: input.category, plannedAmount: input.plannedAmount },
+        approvalResubmitted,
+      },
+    })
+    return { updated: true, approvalResubmitted }
+  }).catch(mapError)
+}
+
+async function submitApprovalRequest(tx: Prisma.TransactionClient, input: {
+  festivalId: string
+  targetKey: string
+  type: 'PLAN' | 'BUDGET'
+  budgetItemId?: string
+  requestedAmount?: number
+  actorId: string
+}) {
+  const existing = await festivalsRepository.findApprovalByTargetKey(tx, input.targetKey)
+  if (existing?.status === 'PENDING') throw new FestivalServiceError('This approval request is already pending.')
+  if (existing?.status === 'APPROVED') throw new FestivalServiceError('This request has already been approved.')
+  const submittedAt = new Date()
+  if (existing) {
+    const resubmitted = await festivalsRepository.resubmitRejectedApproval(tx, existing.id, {
+      status: 'PENDING',
+      requestedAmount: input.requestedAmount ?? null,
+      approvedAmount: null,
+      submittedById: input.actorId,
+      submittedAt,
+      decidedById: null,
+      decidedAt: null,
+      decisionReason: null,
+    })
+    if (!resubmitted.count) throw new FestivalServiceError('This approval request changed while it was being resubmitted.')
+    await writeAuditLog(tx, {
+      actorId: input.actorId,
+      action: 'FESTIVAL_APPROVAL_RESUBMITTED',
+      entity: 'FestivalApproval',
+      entityId: existing.id,
+      details: {
+        festivalId: input.festivalId,
+        type: input.type,
+        requestedAmount: input.requestedAmount ?? null,
+      },
+    })
+    return { id: existing.id, status: 'PENDING' as const }
+  }
+
+  const approval = await festivalsRepository.createApproval(tx, {
+    festivalId: input.festivalId,
+    budgetItemId: input.budgetItemId ?? null,
+    targetKey: input.targetKey,
+    type: input.type,
+    requestedAmount: input.requestedAmount ?? null,
+    submittedById: input.actorId,
+    submittedAt,
+  })
+  await writeAuditLog(tx, {
+    actorId: input.actorId,
+    action: 'FESTIVAL_APPROVAL_SUBMITTED',
+    entity: 'FestivalApproval',
+    entityId: approval.id,
+    details: {
+      festivalId: input.festivalId,
+      type: input.type,
+      budgetItemId: input.budgetItemId ?? null,
+      requestedAmount: input.requestedAmount ?? null,
+    },
+  })
+  return approval
+}
+
+export async function submitFestivalPlanApproval(input: FestivalPlanApprovalSubmitInput, actorId: string) {
+  return festivalsRepository.transaction(async (tx) => {
+    const festival = await festivalsRepository.findFestivalForApproval(tx, input.festivalId)
+    if (!festival) throw new FestivalServiceError('Festival not found.')
+    if (festival.status === 'COMPLETED' || festival.status === 'CANCELLED') {
+      throw new FestivalServiceError('A completed or cancelled festival plan cannot be submitted for approval.')
+    }
+    return submitApprovalRequest(tx, {
+      festivalId: festival.id,
+      targetKey: targetKey('PLAN', festival.id),
+      type: 'PLAN',
+      actorId,
+    })
+  }).catch(mapApprovalError)
+}
+
+export async function submitFestivalBudgetApproval(input: FestivalBudgetApprovalSubmitInput, actorId: string) {
+  return festivalsRepository.transaction(async (tx) => {
+    const item = await festivalsRepository.findBudgetItem(tx, input.festivalId, input.budgetItemId)
+    if (!item) throw new FestivalServiceError('Budget item not found for this festival.')
+    return submitApprovalRequest(tx, {
+      festivalId: input.festivalId,
+      targetKey: targetKey('BUDGET', item.id),
+      type: 'BUDGET',
+      budgetItemId: item.id,
+      requestedAmount: item.plannedAmount,
+      actorId,
+    })
+  }).catch(mapApprovalError)
+}
+
+export async function decideFestivalApproval(input: FestivalApprovalDecisionInput, actorId: string) {
+  return festivalsRepository.transaction(async (tx) => {
+    const approval = await festivalsRepository.findApprovalById(tx, input.approvalId)
+    if (!approval) throw new FestivalServiceError('Festival approval request not found.')
+    if (approval.status !== 'PENDING') throw new FestivalServiceError('This approval request has already been decided.')
+    if (input.decision === 'REJECTED' && input.reason.trim().length < 5) {
+      throw new FestivalServiceError('Add a reason when rejecting a request.')
+    }
+    if (approval.type === 'PLAN' && input.approvedAmount !== null) {
+      throw new FestivalServiceError('Plan approvals do not have an approved amount.')
+    }
+    if (approval.type === 'BUDGET' && input.decision === 'APPROVED') {
+      if (approval.requestedAmount === null) throw new FestivalServiceError('Budget request is missing its requested amount.')
+      validateBudgetApprovalAmount(approval.requestedAmount, input.approvedAmount, input.reason)
+    }
+
+    const decidedAt = new Date()
+    const approvedAmount = approval.type === 'BUDGET' && input.decision === 'APPROVED'
+      ? input.approvedAmount
+      : null
+    const updated = await festivalsRepository.decideApproval(tx, approval.id, {
+      status: input.decision,
+      approvedAmount,
+      decidedById: actorId,
+      decidedAt,
+      decisionReason: input.reason || null,
+    })
+    if (!updated.count) throw new FestivalServiceError('This approval request has already been decided.')
+    await writeAuditLog(tx, {
+      actorId,
+      action: `FESTIVAL_APPROVAL_${input.decision}`,
+      entity: 'FestivalApproval',
+      entityId: approval.id,
+      details: {
+        festivalId: approval.festivalId,
+        type: approval.type,
+        requestedAmount: approval.requestedAmount,
+        approvedAmount,
+        reason: input.reason || null,
+        decidedAt: decidedAt.toISOString(),
+      },
+    })
+    return { status: input.decision, approvedAmount, decidedAt }
+  }).catch(mapApprovalError)
 }
 
 export async function linkFestivalFinanceEntry(input: FestivalFinanceLinkInput, actorId: string) {

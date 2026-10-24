@@ -19,8 +19,14 @@ export const festivalsRepository = {
   findForUpdate: (tx: Transaction, festivalId: string) =>
     tx.festival.findUnique({
       where: { id: festivalId },
-      select: { id: true, name: true, year: true, status: true },
+      select: {
+        id: true, name: true, year: true, organizer: true, venue: true,
+        startDate: true, endDate: true, notes: true, status: true,
+      },
     }),
+
+  findFestivalForApproval: (tx: Transaction, festivalId: string) =>
+    tx.festival.findUnique({ where: { id: festivalId }, select: { id: true, status: true } }),
 
   create: (tx: Transaction, input: Prisma.FestivalUncheckedCreateInput) =>
     tx.festival.create({ data: input }),
@@ -88,8 +94,56 @@ export const festivalsRepository = {
   findBudgetItem: (tx: Transaction, festivalId: string, budgetItemId: string) =>
     tx.festivalBudgetItem.findFirst({
       where: { id: budgetItemId, festivalId },
-      select: { id: true, type: true, category: true, plannedAmount: true },
+      select: { id: true, type: true, category: true, plannedAmount: true, notes: true },
     }),
+
+  updateBudgetItem: (tx: Transaction, festivalId: string, budgetItemId: string, input: Prisma.FestivalBudgetItemUncheckedUpdateInput) =>
+    tx.festivalBudgetItem.updateMany({ where: { id: budgetItemId, festivalId }, data: input }),
+
+  countFinanceLinksForBudgetItem: (tx: Transaction, budgetItemId: string) =>
+    tx.festivalFinanceLink.count({ where: { budgetItemId } }),
+
+  findApprovalByTargetKey: (tx: Transaction, targetKey: string) =>
+    tx.festivalApproval.findUnique({ where: { targetKey } }),
+
+  createApproval: (tx: Transaction, input: Prisma.FestivalApprovalUncheckedCreateInput) =>
+    tx.festivalApproval.create({ data: input }),
+
+  resubmitRejectedApproval: (
+    tx: Transaction,
+    approvalId: string,
+    input: Prisma.FestivalApprovalUpdateManyMutationInput,
+  ) => tx.festivalApproval.updateMany({
+    where: { id: approvalId, status: 'REJECTED' },
+    data: input,
+  }),
+
+  resubmitApprovedApproval: (
+    tx: Transaction,
+    targetKey: string,
+    input: Prisma.FestivalApprovalUpdateManyMutationInput,
+  ) => tx.festivalApproval.updateMany({
+    where: { targetKey, status: 'APPROVED' },
+    data: input,
+  }),
+
+  updatePendingApprovalAmount: (tx: Transaction, targetKey: string, requestedAmount: number) =>
+    tx.festivalApproval.updateMany({
+      where: { targetKey, status: 'PENDING', type: 'BUDGET' },
+      data: { requestedAmount },
+    }),
+
+  findApprovalById: (tx: Transaction, approvalId: string) =>
+    tx.festivalApproval.findUnique({ where: { id: approvalId } }),
+
+  decideApproval: (
+    tx: Transaction,
+    approvalId: string,
+    input: Prisma.FestivalApprovalUpdateManyMutationInput,
+  ) => tx.festivalApproval.updateMany({
+    where: { id: approvalId, status: 'PENDING' },
+    data: input,
+  }),
 
   findFinanceEntry: (tx: Transaction, financeEntryId: string) =>
     tx.financeEntry.findUnique({
@@ -116,7 +170,7 @@ export const festivalsRepository = {
     tx.festivalFinanceLink.deleteMany({ where: { id: linkId, festivalId } }),
 
   planningData: async (festivalId: string) => {
-    const [categories, invitations, entries, budgetItems, financeLinks] = await Promise.all([
+    const [categories, invitations, entries, budgetItems, financeLinks, approvals] = await Promise.all([
       prisma.festivalEntryCategory.findMany({
         where: { festivalId },
         orderBy: [{ name: 'asc' }, { id: 'asc' }],
@@ -141,10 +195,19 @@ export const festivalsRepository = {
         where: { festivalId },
         orderBy: [{ linkedAt: 'desc' }, { id: 'desc' }],
       }),
+      prisma.festivalApproval.findMany({
+        where: { festivalId },
+        orderBy: [{ submittedAt: 'desc' }, { id: 'desc' }],
+        take: 200,
+      }),
     ])
     const productionIds = [...new Set(entries.flatMap((entry) => entry.productionId ? [entry.productionId] : []))]
+    const approvalUserIds = [...new Set(approvals.flatMap((approval) => [
+      approval.submittedById,
+      ...(approval.decidedById ? [approval.decidedById] : []),
+    ]))]
     const linkedFinanceEntryIds = [...new Set(financeLinks.map((link) => link.financeEntryId))]
-    const [productions, linkedFinanceEntries, recentFinanceEntries] = await Promise.all([
+    const [productions, linkedFinanceEntries, recentFinanceEntries, approvalUsers] = await Promise.all([
       productionIds.length
         ? prisma.production.findMany({
         where: { id: { in: productionIds } },
@@ -162,6 +225,12 @@ export const festivalsRepository = {
         take: 200,
         select: { id: true, type: true, amount: true, category: true, description: true, occurredAt: true },
       }),
+      approvalUserIds.length
+        ? prisma.user.findMany({
+          where: { id: { in: approvalUserIds } },
+          select: { id: true, name: true },
+        })
+        : Promise.resolve([]),
     ])
     const recentLinks = recentFinanceEntries.length
       ? await prisma.festivalFinanceLink.findMany({
@@ -174,6 +243,12 @@ export const festivalsRepository = {
     const categoryNames = new Map(categories.map((category) => [category.id, category.name]))
     const productionNames = new Map(productions.map((production) => [production.id, production.title]))
     const financeEntries = new Map(linkedFinanceEntries.map((entry) => [entry.id, entry]))
+    const approvalNames = new Map(approvalUsers.map((user) => [user.id, user.name]))
+    const approvalByTarget = new Map(approvals.map((approval) => [approval.targetKey, {
+      ...approval,
+      submittedByName: approvalNames.get(approval.submittedById) ?? 'Unknown user',
+      decidedByName: approval.decidedById ? approvalNames.get(approval.decidedById) ?? 'Unknown user' : null,
+    }]))
     const budgetAmounts = new Map<string, number[]>()
     for (const link of financeLinks) {
       const linked = financeEntries.get(link.financeEntryId)
@@ -199,6 +274,7 @@ export const festivalsRepository = {
       budgetItems: budgetItems.map((item) => ({
         ...item,
         actualAmount: sumLinkedFinanceAmounts(budgetAmounts.get(item.id) ?? []),
+        approval: approvalByTarget.get(`BUDGET:${item.id}`) ?? null,
         links: financeLinks
           .filter((link) => link.budgetItemId === item.id)
           .map((link) => ({
@@ -208,6 +284,7 @@ export const festivalsRepository = {
       })),
       unlinkedFinanceEntries,
       productionOptions,
+      planApproval: approvalByTarget.get(`PLAN:${festivalId}`) ?? null,
     }
   },
 }

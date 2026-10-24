@@ -2,6 +2,8 @@ export type FestivalEntryStatus = 'PENDING' | 'PREPARING' | 'SUBMITTED' | 'CONFI
 export type FestivalInvitationStatus = 'RECEIVED' | 'ACCEPTED' | 'DECLINED'
 export type FestivalBudgetType = 'INCOME' | 'EXPENSE'
 
+export class FestivalApprovalRuleError extends Error {}
+
 const entryTransitions: Record<FestivalEntryStatus, FestivalEntryStatus[]> = {
   PENDING: ['PREPARING', 'SUBMITTED'],
   PREPARING: ['SUBMITTED'],
@@ -29,14 +31,28 @@ export function sumLinkedFinanceAmounts(amounts: number[]) {
 export function summarizeFestivalBudget(items: Array<{
   type: FestivalBudgetType
   plannedAmount: number
+  approvedAmount?: number | null
   actualAmount: number
 }>) {
   return items.reduce((totals, item) => {
     totals[item.type].planned += item.plannedAmount
+    totals[item.type].approved += item.approvedAmount ?? 0
     totals[item.type].actual += item.actualAmount
     return totals
   }, {
-    INCOME: { planned: 0, actual: 0 },
-    EXPENSE: { planned: 0, actual: 0 },
+    INCOME: { planned: 0, approved: 0, actual: 0 },
+    EXPENSE: { planned: 0, approved: 0, actual: 0 },
   })
+}
+
+export function validateBudgetApprovalAmount(requestedAmount: number, approvedAmount: number | null, reason: string) {
+  if (approvedAmount === null || !Number.isSafeInteger(approvedAmount) || approvedAmount <= 0) {
+    throw new FestivalApprovalRuleError('Enter a positive approved amount.')
+  }
+  if (approvedAmount > requestedAmount) {
+    throw new FestivalApprovalRuleError('Approved amount cannot exceed the requested amount.')
+  }
+  if (approvedAmount < requestedAmount && reason.trim().length < 5) {
+    throw new FestivalApprovalRuleError('Explain why the requested amount was reduced.')
+  }
 }

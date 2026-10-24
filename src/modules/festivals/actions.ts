@@ -5,11 +5,15 @@ import { AccessError, requirePermission } from '@/lib/permissions'
 import {
   entryCategorySchema,
   entryCategoryUpdateSchema,
+  festivalApprovalDecisionSchema,
+  festivalBudgetApprovalSubmitSchema,
+  festivalBudgetItemUpdateSchema,
   festivalCreateSchema,
   festivalBudgetItemSchema,
   festivalEntryCreateSchema,
   festivalFinanceLinkSchema,
   festivalFinanceUnlinkSchema,
+  festivalPlanApprovalSubmitSchema,
   festivalEntryStatusSchema,
   invitationCreateSchema,
   invitationStatusSchema,
@@ -21,13 +25,17 @@ import {
   createFestivalInvitation,
   createFestivalBudgetItem,
   createFestival,
+  decideFestivalApproval,
   FestivalServiceError,
   linkFestivalFinanceEntry,
   unlinkFestivalFinanceEntry,
+  submitFestivalBudgetApproval,
+  submitFestivalPlanApproval,
   updateFestivalEntryStatus,
   updateFestivalCategory,
   updateFestivalInvitationStatus,
   updateFestival,
+  updateFestivalBudgetItem,
 } from './service'
 
 export type FestivalActionState = { success?: boolean; message?: string; error?: string }
@@ -94,9 +102,14 @@ export async function updateFestivalAction(_state: FestivalActionState, form: Fo
       notes: value(form, 'notes'),
     })
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Check the festival details.' }
-    await updateFestival(parsed.data, actor.id)
+    const result = await updateFestival(parsed.data, actor.id)
     refresh(parsed.data.festivalId)
-    return { success: true, message: 'Festival details updated.' }
+    return {
+      success: true,
+      message: result.planResubmitted
+        ? 'Festival details updated and the plan was returned for approval.'
+        : 'Festival details updated.',
+    }
   } catch (error) {
     return actionError(error)
   }
@@ -224,6 +237,83 @@ export async function createFestivalBudgetItemAction(_state: FestivalActionState
     await createFestivalBudgetItem(parsed.data, actor.id)
     refresh(parsed.data.festivalId)
     return { success: true, message: 'Festival budget item created.' }
+  } catch (error) {
+    return actionError(error)
+  }
+}
+
+export async function updateFestivalBudgetItemAction(_state: FestivalActionState, form: FormData): Promise<FestivalActionState> {
+  try {
+    const actor = await financeActor()
+    const rawAmount = value(form, 'plannedAmount').trim()
+    const parsed = festivalBudgetItemUpdateSchema.safeParse({
+      festivalId: value(form, 'festivalId'),
+      budgetItemId: value(form, 'budgetItemId'),
+      type: value(form, 'type'),
+      category: value(form, 'category'),
+      plannedAmount: rawAmount ? Number(rawAmount) : Number.NaN,
+      notes: value(form, 'notes'),
+    })
+    if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Check budget details.' }
+    const result = await updateFestivalBudgetItem(parsed.data, actor.id)
+    refresh(parsed.data.festivalId)
+    return {
+      success: true,
+      message: !result.updated
+        ? 'No budget item changes to save.'
+        : result.approvalResubmitted
+          ? 'Budget item updated and sent for approval again.'
+          : 'Budget item updated.',
+    }
+  } catch (error) {
+    return actionError(error)
+  }
+}
+
+export async function submitFestivalPlanApprovalAction(_state: FestivalActionState, form: FormData): Promise<FestivalActionState> {
+  try {
+    const actor = await requirePermission('festivals:approve')
+    const parsed = festivalPlanApprovalSubmitSchema.safeParse({ festivalId: value(form, 'festivalId') })
+    if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Choose a festival plan.' }
+    await submitFestivalPlanApproval(parsed.data, actor.id)
+    refresh(parsed.data.festivalId)
+    return { success: true, message: 'Festival plan submitted for approval.' }
+  } catch (error) {
+    return actionError(error)
+  }
+}
+
+export async function submitFestivalBudgetApprovalAction(_state: FestivalActionState, form: FormData): Promise<FestivalActionState> {
+  try {
+    const actor = await financeActor()
+    const parsed = festivalBudgetApprovalSubmitSchema.safeParse({
+      festivalId: value(form, 'festivalId'),
+      budgetItemId: value(form, 'budgetItemId'),
+    })
+    if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Choose a budget item.' }
+    await submitFestivalBudgetApproval(parsed.data, actor.id)
+    refresh(parsed.data.festivalId)
+    return { success: true, message: 'Budget item submitted for approval.' }
+  } catch (error) {
+    return actionError(error)
+  }
+}
+
+export async function decideFestivalApprovalAction(_state: FestivalActionState, form: FormData): Promise<FestivalActionState> {
+  try {
+    const actor = await requirePermission('festivals:approve')
+    await requirePermission('finance:manage')
+    const rawApprovedAmount = value(form, 'approvedAmount').trim()
+    const parsed = festivalApprovalDecisionSchema.safeParse({
+      approvalId: value(form, 'approvalId'),
+      decision: value(form, 'decision'),
+      approvedAmount: rawApprovedAmount ? Number(rawApprovedAmount) : null,
+      reason: value(form, 'reason'),
+    })
+    if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Check the approval decision.' }
+    const result = await decideFestivalApproval(parsed.data, actor.id)
+    refresh()
+    return { success: true, message: `Request ${result.status.toLowerCase()}.` }
   } catch (error) {
     return actionError(error)
   }

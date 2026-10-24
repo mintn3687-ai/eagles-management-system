@@ -170,6 +170,17 @@ enum FestivalBudgetType {
   EXPENSE
 }
 
+enum FestivalApprovalType {
+  PLAN
+  BUDGET
+}
+
+enum FestivalApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum ProductionTaskStatus {
   OPEN
   IN_PROGRESS
@@ -1271,6 +1282,29 @@ model FestivalFinanceLink {
 
   @@index([festivalId, budgetItemId])
   @@index([linkedById])
+}
+
+model FestivalApproval {
+  id              String                 @id @default(cuid())
+  festivalId      String
+  budgetItemId    String?
+  targetKey       String                 @unique
+  type            FestivalApprovalType
+  status          FestivalApprovalStatus @default(PENDING)
+  requestedAmount Int?
+  approvedAmount  Int?
+  submittedById   String
+  submittedAt     DateTime               @default(now())
+  decidedById     String?
+  decidedAt       DateTime?
+  decisionReason  String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  @@index([festivalId, type, status])
+  @@index([budgetItemId, status])
+  @@index([submittedById])
+  @@index([decidedById])
 }
 
 model PushSubscription {

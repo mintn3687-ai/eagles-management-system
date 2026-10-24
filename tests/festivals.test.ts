@@ -3,6 +3,8 @@ import { hasPermission } from '../src/lib/permission-rules'
 import {
   entryCategorySchema,
   festivalBudgetItemSchema,
+  festivalApprovalDecisionSchema,
+  festivalBudgetApprovalSubmitSchema,
   festivalCreateSchema,
   festivalFinanceLinkSchema,
   festivalEntryCreateSchema,
@@ -14,6 +16,7 @@ import {
   isEntryOverdue,
   isInvitationOverdue,
   summarizeFestivalBudget,
+  validateBudgetApprovalAmount,
 } from '../src/modules/festivals/rules'
 
 const createInput = {
@@ -113,13 +116,34 @@ describe('festival planning foundation', () => {
 
   it('summarizes planned and actual KES separately for budget income and expenses', () => {
     expect(summarizeFestivalBudget([
-      { type: 'INCOME', plannedAmount: 100000, actualAmount: 20000 },
-      { type: 'EXPENSE', plannedAmount: 80000, actualAmount: 85000 },
+      { type: 'INCOME', plannedAmount: 100000, approvedAmount: 80000, actualAmount: 20000 },
+      { type: 'EXPENSE', plannedAmount: 80000, approvedAmount: 60000, actualAmount: 85000 },
       { type: 'EXPENSE', plannedAmount: 10000, actualAmount: 0 },
     ])).toEqual({
-      INCOME: { planned: 100000, actual: 20000 },
-      EXPENSE: { planned: 90000, actual: 85000 },
+      INCOME: { planned: 100000, approved: 80000, actual: 20000 },
+      EXPENSE: { planned: 90000, approved: 60000, actual: 85000 },
     })
+  })
+
+  it('validates approval decisions, budget reductions, and approver permissions', () => {
+    expect(festivalBudgetApprovalSubmitSchema.safeParse({
+      festivalId: 'festival-id',
+      budgetItemId: 'budget-item-id',
+    }).success).toBe(true)
+    expect(festivalApprovalDecisionSchema.safeParse({
+      approvalId: 'approval-id',
+      decision: 'APPROVED',
+      approvedAmount: 40000,
+      reason: '',
+    }).success).toBe(true)
+    expect(validateBudgetApprovalAmount(50000, 50000, '')).toBeUndefined()
+    expect(validateBudgetApprovalAmount(50000, 40000, 'Reduced costs')).toBeUndefined()
+    expect(() => validateBudgetApprovalAmount(50000, 60000, '')).toThrow(/cannot exceed/)
+    expect(() => validateBudgetApprovalAmount(50000, 40000, '')).toThrow(/Explain why/)
+
+    expect(hasPermission('MEMBER', 'festivals:approve')).toBe(false)
+    expect(hasPermission('COMMITTEE', 'festivals:approve')).toBe(true)
+    expect(hasPermission('SUPER_ADMIN', 'festivals:approve')).toBe(true)
   })
 
   it('restricts festival planning to committee and super admins', () => {

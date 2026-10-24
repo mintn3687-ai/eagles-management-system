@@ -3,6 +3,9 @@ import { parseNairobiDate } from '../src/lib/dates'
 
 const mocks = vi.hoisted(() => ({
   transaction: vi.fn(),
+  findForUpdate: vi.fn(),
+  update: vi.fn(),
+  findFestivalForApproval: vi.fn(),
   festivalExists: vi.fn(),
   categoryForFestival: vi.fn(),
   productionExists: vi.fn(),
@@ -17,6 +20,15 @@ const mocks = vi.hoisted(() => ({
   transitionEntry: vi.fn(),
   createBudgetItem: vi.fn(),
   findBudgetItem: vi.fn(),
+  updateBudgetItem: vi.fn(),
+  countFinanceLinksForBudgetItem: vi.fn(),
+  findApprovalByTargetKey: vi.fn(),
+  createApproval: vi.fn(),
+  resubmitRejectedApproval: vi.fn(),
+  resubmitApprovedApproval: vi.fn(),
+  updatePendingApprovalAmount: vi.fn(),
+  findApprovalById: vi.fn(),
+  decideApproval: vi.fn(),
   findFinanceEntry: vi.fn(),
   findFinanceLinkByEntry: vi.fn(),
   createFinanceLink: vi.fn(),
@@ -29,6 +41,9 @@ vi.mock('server-only', () => ({}))
 vi.mock('../src/modules/festivals/repository', () => ({
   festivalsRepository: {
     transaction: mocks.transaction,
+    findForUpdate: mocks.findForUpdate,
+    update: mocks.update,
+    findFestivalForApproval: mocks.findFestivalForApproval,
     festivalExists: mocks.festivalExists,
     categoryForFestival: mocks.categoryForFestival,
     productionExists: mocks.productionExists,
@@ -43,6 +58,15 @@ vi.mock('../src/modules/festivals/repository', () => ({
     transitionEntry: mocks.transitionEntry,
     createBudgetItem: mocks.createBudgetItem,
     findBudgetItem: mocks.findBudgetItem,
+    updateBudgetItem: mocks.updateBudgetItem,
+    countFinanceLinksForBudgetItem: mocks.countFinanceLinksForBudgetItem,
+    findApprovalByTargetKey: mocks.findApprovalByTargetKey,
+    createApproval: mocks.createApproval,
+    resubmitRejectedApproval: mocks.resubmitRejectedApproval,
+    resubmitApprovedApproval: mocks.resubmitApprovedApproval,
+    updatePendingApprovalAmount: mocks.updatePendingApprovalAmount,
+    findApprovalById: mocks.findApprovalById,
+    decideApproval: mocks.decideApproval,
     findFinanceEntry: mocks.findFinanceEntry,
     findFinanceLinkByEntry: mocks.findFinanceLinkByEntry,
     createFinanceLink: mocks.createFinanceLink,
@@ -55,6 +79,11 @@ vi.mock('@/lib/audit', () => ({ writeAuditLog: mocks.writeAuditLog }))
 import {
   createFestivalEntry,
   createFestivalBudgetItem,
+  updateFestival,
+  updateFestivalBudgetItem,
+  submitFestivalPlanApproval,
+  submitFestivalBudgetApproval,
+  decideFestivalApproval,
   FestivalServiceError,
   linkFestivalFinanceEntry,
   unlinkFestivalFinanceEntry,
@@ -79,8 +108,26 @@ describe('festival entries and invitations service', () => {
     mocks.transitionInvitation.mockResolvedValue({ count: 1 })
     mocks.createBudgetItem.mockResolvedValue({ id: 'budget-item-id', category: 'Transport', plannedAmount: 50000 })
     mocks.findBudgetItem.mockResolvedValue({
-      id: 'budget-item-id', type: 'EXPENSE', category: 'Transport', plannedAmount: 50000,
+      id: 'budget-item-id', type: 'EXPENSE', category: 'Transport', plannedAmount: 50000, notes: null,
     })
+    mocks.findForUpdate.mockResolvedValue({
+      id: 'festival-id', name: 'Old Festival', year: 2027, organizer: null, venue: null,
+      startDate: null, endDate: null, notes: null, status: 'PLANNING',
+    })
+    mocks.update.mockImplementation(async (_tx, _festivalId, data) => ({ id: 'festival-id', ...data }))
+    mocks.findFestivalForApproval.mockResolvedValue({ id: 'festival-id', status: 'PLANNING' })
+    mocks.findApprovalByTargetKey.mockResolvedValue(null)
+    mocks.createApproval.mockResolvedValue({ id: 'approval-id', status: 'PENDING' })
+    mocks.resubmitRejectedApproval.mockResolvedValue({ count: 1 })
+    mocks.resubmitApprovedApproval.mockResolvedValue({ count: 1 })
+    mocks.updatePendingApprovalAmount.mockResolvedValue({ count: 1 })
+    mocks.updateBudgetItem.mockResolvedValue({ count: 1 })
+    mocks.countFinanceLinksForBudgetItem.mockResolvedValue(0)
+    mocks.findApprovalById.mockResolvedValue({
+      id: 'approval-id', festivalId: 'festival-id', type: 'BUDGET', status: 'PENDING',
+      requestedAmount: 50000,
+    })
+    mocks.decideApproval.mockResolvedValue({ count: 1 })
     mocks.findFinanceEntry.mockResolvedValue({
       id: 'finance-entry-id', type: 'EXPENSE', amount: 45000,
       category: 'Transport', description: 'Bus to festival', occurredAt: parseNairobiDate('2027-04-01'),
@@ -222,5 +269,138 @@ describe('festival entries and invitations service', () => {
       action: 'FESTIVAL_FINANCE_ENTRY_UNLINKED',
       details: expect.objectContaining({ financeEntryId: 'finance-entry-id', amount: 45000 }),
     }))
+  })
+
+  it('submits plan approval once and allows resubmission after rejection', async () => {
+    await expect(submitFestivalPlanApproval({ festivalId: 'festival-id' }, 'committee-user'))
+      .resolves.toMatchObject({ status: 'PENDING' })
+    expect(mocks.createApproval).toHaveBeenCalledWith({}, expect.objectContaining({
+      festivalId: 'festival-id',
+      targetKey: 'PLAN:festival-id',
+      type: 'PLAN',
+      submittedById: 'committee-user',
+    }))
+
+    mocks.findApprovalByTargetKey.mockResolvedValue({ id: 'approval-id', status: 'PENDING' })
+    await expect(submitFestivalPlanApproval({ festivalId: 'festival-id' }, 'committee-user'))
+      .rejects.toThrow(/already pending/)
+
+    mocks.findApprovalByTargetKey.mockResolvedValue({ id: 'approval-id', status: 'REJECTED' })
+    await expect(submitFestivalPlanApproval({ festivalId: 'festival-id' }, 'committee-user'))
+      .resolves.toMatchObject({ id: 'approval-id', status: 'PENDING' })
+    expect(mocks.resubmitRejectedApproval).toHaveBeenCalledWith({}, 'approval-id', expect.objectContaining({
+      status: 'PENDING',
+      submittedById: 'committee-user',
+    }))
+  })
+
+  it('submits a budget approval using the current planned amount', async () => {
+    await expect(submitFestivalBudgetApproval({
+      festivalId: 'festival-id',
+      budgetItemId: 'budget-item-id',
+    }, 'committee-user')).resolves.toMatchObject({ status: 'PENDING' })
+    expect(mocks.createApproval).toHaveBeenCalledWith({}, expect.objectContaining({
+      targetKey: 'BUDGET:budget-item-id',
+      type: 'BUDGET',
+      requestedAmount: 50000,
+    }))
+  })
+
+  it('requires a reason for reduced budget approval and saves full decision metadata', async () => {
+    await expect(decideFestivalApproval({
+      approvalId: 'approval-id', decision: 'APPROVED', approvedAmount: 40000, reason: '',
+    }, 'committee-user')).rejects.toThrow(/Explain why/)
+    expect(mocks.decideApproval).not.toHaveBeenCalled()
+
+    await expect(decideFestivalApproval({
+      approvalId: 'approval-id', decision: 'APPROVED', approvedAmount: 40000, reason: 'Reduced costs',
+    }, 'committee-user')).resolves.toMatchObject({ status: 'APPROVED', approvedAmount: 40000 })
+    expect(mocks.decideApproval).toHaveBeenCalledWith({}, 'approval-id', expect.objectContaining({
+      status: 'APPROVED',
+      approvedAmount: 40000,
+      decidedById: 'committee-user',
+      decisionReason: 'Reduced costs',
+      decidedAt: expect.any(Date),
+    }))
+  })
+
+  it('requires a rejection reason and guards concurrent approval decisions', async () => {
+    await expect(decideFestivalApproval({
+      approvalId: 'approval-id', decision: 'REJECTED', approvedAmount: null, reason: '',
+    }, 'committee-user')).rejects.toThrow(/reason when rejecting/)
+
+    mocks.decideApproval.mockResolvedValue({ count: 0 })
+    await expect(decideFestivalApproval({
+      approvalId: 'approval-id', decision: 'REJECTED', approvedAmount: null, reason: 'Not ready',
+    }, 'committee-user')).rejects.toThrow(/already been decided/)
+  })
+
+  it('returns an approved festival plan to Pending only when details change', async () => {
+    mocks.findApprovalByTargetKey.mockResolvedValue({ id: 'approval-id', status: 'APPROVED' })
+    const result = await updateFestival({
+      festivalId: 'festival-id',
+      name: 'New Festival',
+      year: 2027,
+      organizer: '',
+      venue: '',
+      startDate: null,
+      endDate: null,
+      status: 'PLANNING',
+      notes: '',
+    }, 'committee-user')
+    expect(result.planResubmitted).toBe(true)
+    expect(mocks.resubmitApprovedApproval).toHaveBeenCalledWith({}, 'PLAN:festival-id', expect.objectContaining({
+      status: 'PENDING',
+      submittedById: 'committee-user',
+    }))
+
+    mocks.findForUpdate.mockResolvedValue({
+      id: 'festival-id', name: 'New Festival', year: 2027, organizer: null, venue: null,
+      startDate: null, endDate: null, notes: null, status: 'PLANNING',
+    })
+    mocks.update.mockClear()
+    await expect(updateFestival({
+      festivalId: 'festival-id',
+      name: 'New Festival',
+      year: 2027,
+      organizer: '',
+      venue: '',
+      startDate: null,
+      endDate: null,
+      status: 'PLANNING',
+      notes: '',
+    }, 'committee-user')).resolves.toMatchObject({ planResubmitted: false })
+    expect(mocks.update).not.toHaveBeenCalled()
+  })
+
+  it('resubmits changed approved budget items but leaves unchanged items alone', async () => {
+    mocks.findApprovalByTargetKey.mockResolvedValue({ id: 'approval-id', status: 'APPROVED' })
+    await expect(updateFestivalBudgetItem({
+      festivalId: 'festival-id',
+      budgetItemId: 'budget-item-id',
+      type: 'EXPENSE',
+      category: 'Transport',
+      plannedAmount: 60000,
+      notes: '',
+    }, 'committee-user')).resolves.toEqual({ updated: true, approvalResubmitted: true })
+    expect(mocks.resubmitApprovedApproval).toHaveBeenCalledWith({}, 'BUDGET:budget-item-id', expect.objectContaining({
+      status: 'PENDING',
+      requestedAmount: 60000,
+      submittedById: 'committee-user',
+    }))
+
+    mocks.findBudgetItem.mockResolvedValue({
+      id: 'budget-item-id', type: 'EXPENSE', category: 'Transport', plannedAmount: 50000, notes: null,
+    })
+    mocks.updateBudgetItem.mockClear()
+    await expect(updateFestivalBudgetItem({
+      festivalId: 'festival-id',
+      budgetItemId: 'budget-item-id',
+      type: 'EXPENSE',
+      category: 'Transport',
+      plannedAmount: 50000,
+      notes: '',
+    }, 'committee-user')).resolves.toEqual({ updated: false, approvalResubmitted: false })
+    expect(mocks.updateBudgetItem).not.toHaveBeenCalled()
   })
 })

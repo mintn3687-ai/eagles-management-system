@@ -8,12 +8,16 @@ import {
   createFestivalEntryAction,
   createFestivalInvitationAction,
   createFestivalBudgetItemAction,
+  decideFestivalApprovalAction,
   createFestivalAction,
   linkFestivalFinanceEntryAction,
   unlinkFestivalFinanceEntryAction,
+  submitFestivalPlanApprovalAction,
+  submitFestivalBudgetApprovalAction,
   updateFestivalEntryStatusAction,
   updateFestivalInvitationStatusAction,
   updateFestivalCategoryAction,
+  updateFestivalBudgetItemAction,
   updateFestivalAction,
 } from '@/modules/festivals/actions'
 import type { FestivalActionState } from '@/modules/festivals/actions'
@@ -34,7 +38,13 @@ type FestivalRecord = {
 }
 type FestivalCategoryOption = { id: string; name: string; defaultDeadline: Date | null }
 type ProductionOption = { id: string; title: string }
-type BudgetItemOption = { id: string; type: string; category: string }
+type BudgetItemOption = {
+  id: string
+  type: string
+  category: string
+  plannedAmount: number
+  notes: string | null
+}
 type FinanceEntryOption = {
   id: string
   type: string
@@ -110,6 +120,7 @@ export function FestivalUpdateForm({ festival, today }: { festival: FestivalReco
   return <Form action={updateFestivalAction} submit="Save festival details">
     <input type="hidden" name="festivalId" value={festival.id} />
     <h2>Festival details</h2>
+    <p className="text-sm text-slate-600">Changes to an approved plan return it to Pending for approval again.</p>
     <FestivalFields festival={festival} today={today} />
   </Form>
 }
@@ -219,26 +230,32 @@ export function FestivalEntryStatusForm({ festivalId, entryId, status }: {
   </Form>
 }
 
-export function FestivalBudgetItemForm({ festivalId }: { festivalId: string }) {
-  return <Form action={createFestivalBudgetItemAction} submit="Add budget item">
+export function FestivalBudgetItemForm({ festivalId, budgetItem }: {
+  festivalId: string
+  budgetItem?: BudgetItemOption
+}) {
+  const action = budgetItem ? updateFestivalBudgetItemAction : createFestivalBudgetItemAction
+  const prefix = budgetItem ? `budget-item-${budgetItem.id}` : 'festival-budget-new'
+  return <Form action={action} submit={budgetItem ? 'Save budget item' : 'Add budget item'}>
     <input type="hidden" name="festivalId" value={festivalId} />
-    <h3>Plan income or expense</h3>
+    {budgetItem && <input type="hidden" name="budgetItemId" value={budgetItem.id} />}
+    <h3>{budgetItem ? `Edit ${budgetItem.category}` : 'Plan income or expense'}</h3>
     <div className="grid gap-3 sm:grid-cols-2">
-      <div><label className="label" htmlFor="festival-budget-type">Budget type</label>
-        <select className="input" id="festival-budget-type" name="type" defaultValue="EXPENSE">
+      <div><label className="label" htmlFor={`${prefix}-type`}>Budget type</label>
+        <select className="input" id={`${prefix}-type`} name="type" defaultValue={budgetItem?.type ?? 'EXPENSE'}>
           <option value="EXPENSE">Expense</option>
           <option value="INCOME">Income</option>
         </select>
       </div>
-      <div><label className="label" htmlFor="festival-budget-category">Category</label>
-        <input className="input" id="festival-budget-category" name="category" maxLength={120} placeholder="Transport, registration, meals…" required />
+      <div><label className="label" htmlFor={`${prefix}-category`}>Category</label>
+        <input className="input" id={`${prefix}-category`} name="category" maxLength={120} placeholder="Transport, registration, meals…" required defaultValue={budgetItem?.category ?? ''} />
       </div>
     </div>
-    <div><label className="label" htmlFor="festival-budget-planned">Planned amount (KES)</label>
-      <input className="input" id="festival-budget-planned" name="plannedAmount" type="number" min="1" max="2147483647" step="1" required />
+    <div><label className="label" htmlFor={`${prefix}-planned`}>Planned amount (KES)</label>
+      <input className="input" id={`${prefix}-planned`} name="plannedAmount" type="number" min="1" max="2147483647" step="1" required defaultValue={budgetItem?.plannedAmount} />
     </div>
-    <div><label className="label" htmlFor="festival-budget-notes">Notes</label>
-      <textarea className="input" id="festival-budget-notes" name="notes" maxLength={1000} rows={2} />
+    <div><label className="label" htmlFor={`${prefix}-notes`}>Notes</label>
+      <textarea className="input" id={`${prefix}-notes`} name="notes" maxLength={1000} rows={2} defaultValue={budgetItem?.notes ?? ''} />
     </div>
   </Form>
 }
@@ -269,5 +286,48 @@ export function FestivalFinanceUnlinkForm({ festivalId, linkId }: { festivalId: 
   return <Form action={unlinkFestivalFinanceEntryAction} submit="Remove link" className="flex items-center gap-2">
     <input type="hidden" name="festivalId" value={festivalId} />
     <input type="hidden" name="linkId" value={linkId} />
+  </Form>
+}
+
+export function FestivalPlanApprovalRequestForm({ festivalId }: { festivalId: string }) {
+  return <Form action={submitFestivalPlanApprovalAction} submit="Submit plan for approval" className="flex items-center gap-2">
+    <input type="hidden" name="festivalId" value={festivalId} />
+  </Form>
+}
+
+export function FestivalBudgetApprovalRequestForm({ festivalId, budgetItemId }: {
+  festivalId: string
+  budgetItemId: string
+}) {
+  return <Form action={submitFestivalBudgetApprovalAction} submit="Submit budget for approval" className="flex items-center gap-2">
+    <input type="hidden" name="festivalId" value={festivalId} />
+    <input type="hidden" name="budgetItemId" value={budgetItemId} />
+  </Form>
+}
+
+export function FestivalApprovalDecisionForm({ approval }: {
+  approval: {
+    id: string
+    type: string
+    requestedAmount: number | null
+  }
+}) {
+  return <Form action={decideFestivalApprovalAction} submit="Save decision">
+    <input type="hidden" name="approvalId" value={approval.id} />
+    <div><label className="label" htmlFor={`approval-decision-${approval.id}`}>Decision</label>
+      <select className="input" id={`approval-decision-${approval.id}`} name="decision" defaultValue="APPROVED">
+        <option value="APPROVED">Approve</option>
+        <option value="REJECTED">Reject</option>
+      </select>
+    </div>
+    {approval.type === 'BUDGET' && <div>
+      <label className="label" htmlFor={`approval-amount-${approval.id}`}>Approved amount (KES)</label>
+      <input className="input" id={`approval-amount-${approval.id}`} name="approvedAmount" type="number" min="1" max={approval.requestedAmount ?? undefined} step="1" required defaultValue={approval.requestedAmount ?? ''} />
+      <p className="mt-1 text-sm text-slate-600">A reduced amount requires a reason.</p>
+    </div>}
+    <div><label className="label" htmlFor={`approval-reason-${approval.id}`}>Decision reason</label>
+      <textarea className="input" id={`approval-reason-${approval.id}`} name="reason" maxLength={1000} rows={2} />
+      <p className="mt-1 text-sm text-slate-600">Required when rejecting or approving less than requested.</p>
+    </div>
   </Form>
 }

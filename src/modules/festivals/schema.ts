@@ -84,10 +84,30 @@ export const festivalBudgetItemSchema = z.object({
   notes: z.string().trim().max(1000).default(''),
 }).strict()
 
+export const festivalBudgetItemUpdateSchema = festivalBudgetItemSchema.extend({
+  budgetItemId: z.string().trim().min(1).max(191),
+}).strict()
+
 export const festivalFinanceLinkSchema = z.object({
   festivalId: z.string().trim().min(1).max(191),
   budgetItemId: z.string().trim().min(1).max(191),
   financeEntryId: z.string().trim().min(1).max(191),
+}).strict()
+
+export const festivalPlanApprovalSubmitSchema = z.object({
+  festivalId: z.string().trim().min(1).max(191),
+}).strict()
+
+export const festivalBudgetApprovalSubmitSchema = z.object({
+  festivalId: z.string().trim().min(1).max(191),
+  budgetItemId: z.string().trim().min(1).max(191),
+}).strict()
+
+export const festivalApprovalDecisionSchema = z.object({
+  approvalId: z.string().trim().min(1).max(191),
+  decision: z.enum(['APPROVED', 'REJECTED']),
+  approvedAmount: z.number().int().safe().positive().max(2_147_483_647).nullable(),
+  reason: z.string().trim().max(1000).default(''),
 }).strict()
 
 export const festivalFinanceUnlinkSchema = z.object({
@@ -102,5 +122,9 @@ export type EntryCategoryInput = z.infer<typeof entryCategorySchema>
 export type EntryCategoryUpdateInput = z.infer<typeof entryCategoryUpdateSchema>
 export type FestivalEntryCreateInput = z.infer<typeof festivalEntryCreateSchema>
 export type FestivalBudgetItemInput = z.infer<typeof festivalBudgetItemSchema>
+export type FestivalBudgetItemUpdateInput = z.infer<typeof festivalBudgetItemUpdateSchema>
 export type FestivalFinanceLinkInput = z.infer<typeof festivalFinanceLinkSchema>
 export type FestivalFinanceUnlinkInput = z.infer<typeof festivalFinanceUnlinkSchema>
+export type FestivalPlanApprovalSubmitInput = z.infer<typeof festivalPlanApprovalSubmitSchema>
+export type FestivalBudgetApprovalSubmitInput = z.infer<typeof festivalBudgetApprovalSubmitSchema>
+export type FestivalApprovalDecisionInput = z.infer<typeof festivalApprovalDecisionSchema>

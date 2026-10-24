@@ -3,6 +3,8 @@ import { formatNairobiDate, nairobiDateKey } from '@/lib/dates'
 import { formatKES } from '@/lib/money'
 import { pagePermission } from '@/lib/page-access'
 import {
+  FestivalApprovalDecisionForm,
+  FestivalBudgetApprovalRequestForm,
   FestivalBudgetItemForm,
   FestivalCategoryForm,
   FestivalEntryForm,
@@ -11,6 +13,7 @@ import {
   FestivalFinanceUnlinkForm,
   FestivalInvitationForm,
   FestivalInvitationStatusForm,
+  FestivalPlanApprovalRequestForm,
   FestivalUpdateForm,
 } from '@/components/festivals/festival-forms'
 import { getFestival, getFestivalPlanning } from '@/modules/festivals/service'
@@ -36,6 +39,25 @@ export default async function FestivalDetailPage({ params }: {
       </p>}
     </header>
     <FestivalUpdateForm festival={festival} today={today} />
+    <section className="card space-y-3">
+      <h2>Festival plan approval</h2>
+      <p className="text-sm text-slate-600">Any committee member may approve, including the person who submitted. Editing an approved plan returns it to Pending for approval again.</p>
+      {planning.planApproval
+        ? <div className="space-y-2">
+          <p className="font-medium">Status: {planning.planApproval.status.toLowerCase()}</p>
+          <p className="text-sm text-slate-600">Submitted by {planning.planApproval.submittedByName} · {formatNairobiDate(planning.planApproval.submittedAt, true)}</p>
+          {planning.planApproval.decidedAt && <p className="text-sm text-slate-600">
+            {planning.planApproval.status === 'APPROVED' ? 'Approved' : 'Rejected'} by {planning.planApproval.decidedByName} · {formatNairobiDate(planning.planApproval.decidedAt, true)}
+          </p>}
+          {planning.planApproval.decisionReason && <p className="text-sm text-slate-600">Reason: {planning.planApproval.decisionReason}</p>}
+          {planning.planApproval.status === 'PENDING' && <FestivalApprovalDecisionForm approval={planning.planApproval} />}
+          {planning.planApproval.status === 'REJECTED' && <FestivalPlanApprovalRequestForm festivalId={festivalId} />}
+        </div>
+        : <div>
+          <p className="text-sm text-slate-600">This plan has not been submitted for approval.</p>
+          <FestivalPlanApprovalRequestForm festivalId={festivalId} />
+        </div>}
+    </section>
 
     <section className="space-y-4">
       <header>
@@ -126,11 +148,13 @@ export default async function FestivalDetailPage({ params }: {
         <div className="card space-y-1">
           <h3>Planned income</h3>
           <p>{formatKES(planning.budgetSummary.INCOME.planned)}</p>
+          <p className="text-sm text-slate-600">Approved: {formatKES(planning.budgetSummary.INCOME.approved)}</p>
           <p className="text-sm text-slate-600">Actual linked: {formatKES(planning.budgetSummary.INCOME.actual)}</p>
         </div>
         <div className="card space-y-1">
           <h3>Planned expenses</h3>
           <p>{formatKES(planning.budgetSummary.EXPENSE.planned)}</p>
+          <p className="text-sm text-slate-600">Approved: {formatKES(planning.budgetSummary.EXPENSE.approved)}</p>
           <p className="text-sm text-slate-600">Actual linked: {formatKES(planning.budgetSummary.EXPENSE.actual)}</p>
         </div>
       </div>
@@ -140,8 +164,15 @@ export default async function FestivalDetailPage({ params }: {
           {planning.budgetItems.map((item) => <li className="space-y-2 py-3" key={item.id}>
             <p className="font-medium">{item.type} · {item.category}</p>
             <p className="text-sm text-slate-600">
-              Planned: {formatKES(item.plannedAmount)} · Actual linked: {formatKES(item.actualAmount)} · Approved: not tracked yet
+              Planned: {formatKES(item.plannedAmount)} · Actual linked: {formatKES(item.actualAmount)} · Approved: {item.approval?.status === 'APPROVED' && item.approval.approvedAmount !== null ? formatKES(item.approval.approvedAmount) : 'Not approved'}
             </p>
+            {item.approval && <div className="space-y-1 text-sm text-slate-600">
+              <p>Approval status: {item.approval.status.toLowerCase()} · Submitted by {item.approval.submittedByName} · {formatNairobiDate(item.approval.submittedAt, true)}</p>
+              {item.approval.decidedAt && <p>
+                {item.approval.status === 'APPROVED' ? 'Approved' : 'Rejected'} by {item.approval.decidedByName} · {formatNairobiDate(item.approval.decidedAt, true)}
+              </p>}
+              {item.approval.decisionReason && <p>Reason: {item.approval.decisionReason}</p>}
+            </div>}
             {item.notes && <p className="text-sm text-slate-600">{item.notes}</p>}
             {item.links.length ? <ul className="ml-4 list-disc space-y-1 text-sm">
               {item.links.map((link) => <li className="flex flex-wrap items-center gap-2" key={link.id}>
@@ -156,9 +187,15 @@ export default async function FestivalDetailPage({ params }: {
               budgetItem={item}
               entries={planning.unlinkedFinanceEntries}
             />
+            <details>
+              <summary className="cursor-pointer text-sm text-emerald-800">Edit budget item</summary>
+              <div className="mt-2"><FestivalBudgetItemForm festivalId={festivalId} budgetItem={item} /></div>
+            </details>
+            {item.approval?.status === 'PENDING' && <FestivalApprovalDecisionForm approval={item.approval} />}
+            {(!item.approval || item.approval.status === 'REJECTED') && <FestivalBudgetApprovalRequestForm festivalId={festivalId} budgetItemId={item.id} />}
           </li>)}
         </ul> : <p className="text-slate-600">No festival budget items recorded yet.</p>}
-        <p className="text-sm text-slate-600">Budget approvals and approved amounts will be added in Phase 5.</p>
+        <p className="text-sm text-slate-600">A reduced approved budget amount requires a reason. Editing an approved budget item automatically returns it to Pending.</p>
       </div>
     </section>
   </div>
