@@ -187,6 +187,11 @@ enum FestivalLogisticsStatus {
   COMPLETED
 }
 
+enum FestivalDocumentStatus {
+  PENDING_UPLOAD
+  READY
+}
+
 enum ProductionTaskStatus {
   OPEN
   IN_PROGRESS
@@ -1241,19 +1246,19 @@ model FestivalEntryCategory {
 }
 
 model FestivalEntry {
-  id            String             @id @default(cuid())
-  festivalId    String
-  categoryId    String
-  productionId  String?
-  itemTitle     String
-  status        FestivalEntryStatus @default(PENDING)
-  deadline      DateTime?          @db.Timestamp(3)
-  submittedAt   DateTime?          @db.Timestamp(3)
-  confirmedAt   DateTime?          @db.Timestamp(3)
-  notes         String?
-  createdById   String
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
+  id           String              @id @default(cuid())
+  festivalId   String
+  categoryId   String
+  productionId String?
+  itemTitle    String
+  status       FestivalEntryStatus @default(PENDING)
+  deadline     DateTime?           @db.Timestamp(3)
+  submittedAt  DateTime?           @db.Timestamp(3)
+  confirmedAt  DateTime?           @db.Timestamp(3)
+  notes        String?
+  createdById  String
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
 
   @@index([festivalId, status, deadline])
   @@index([categoryId])
@@ -1262,15 +1267,15 @@ model FestivalEntry {
 }
 
 model FestivalBudgetItem {
-  id            String            @id @default(cuid())
+  id            String             @id @default(cuid())
   festivalId    String
   type          FestivalBudgetType
   category      String
   plannedAmount Int
   notes         String?
   createdById   String
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
 
   @@index([festivalId, type, category])
   @@index([createdById])
@@ -1330,6 +1335,25 @@ model FestivalLogisticsItem {
 
   @@index([festivalId, status, dueAt, id])
   @@index([assignedMemberId, festivalId])
+}
+
+model FestivalDocument {
+  id              String                 @id @default(cuid())
+  festivalId      String
+  originalName    String
+  contentType     String
+  sizeBytes       Int
+  storageKey      String                 @unique
+  uploadedById    String
+  status          FestivalDocumentStatus @default(PENDING_UPLOAD)
+  uploadExpiresAt DateTime               @db.Timestamp(3)
+  uploadedAt      DateTime?              @db.Timestamp(3)
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  @@index([festivalId, status, createdAt])
+  @@index([uploadedById])
+  @@index([status, uploadExpiresAt])
 }
 
 model PushSubscription {

@@ -18,6 +18,7 @@ import {
   FestivalPlanApprovalRequestForm,
   FestivalUpdateForm,
 } from '@/components/festivals/festival-forms'
+import { FestivalDocuments } from '@/components/festivals/festival-documents'
 import { getFestival, getFestivalPlanning } from '@/modules/festivals/service'
 import { isEntryOverdue, isFestivalLogisticsOverdue, isInvitationOverdue } from '@/modules/festivals/rules'
 
@@ -236,5 +237,14 @@ export default async function FestivalDetailPage({ params }: {
         </ul> : <p className="text-slate-600">No festival logistics items yet. Add tasks for travel, schedules, equipment, or participant coordination.</p>}
       </div>
     </section>
+
+    <FestivalDocuments
+      festivalId={festivalId}
+      documents={planning.festivalDocuments.map((document) => ({
+        ...document,
+        createdAt: document.createdAt.toISOString(),
+        uploadedAt: document.uploadedAt?.toISOString() ?? null,
+      }))}
+    />
   </div>
 }

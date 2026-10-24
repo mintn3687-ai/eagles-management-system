@@ -1,5 +1,20 @@
 import { z } from 'zod'
+import { MAX_FESTIVAL_DOCUMENT_BYTES } from './document-constants'
 import { festivalLogisticsCategories } from './rules'
+
+const festivalDocumentContentTypes: Record<string, string> = {
+  pdf: 'application/pdf',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+}
+
+function festivalDocumentContentType(fileName: string) {
+  const extension = fileName.split('.').at(-1)?.toLowerCase() ?? ''
+  return festivalDocumentContentTypes[extension] ?? null
+}
 
 const dateKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
   const date = new Date(`${value}T00:00:00Z`)
@@ -136,6 +151,29 @@ export const festivalLogisticsStatusSchema = z.object({
   status: z.enum(['OPEN', 'IN_PROGRESS', 'COMPLETED']),
 }).strict()
 
+export const festivalDocumentUploadSchema = z.object({
+  festivalId: z.string().trim().min(1).max(191),
+  fileName: z.string().trim().min(1).max(180)
+    .refine((value) => !/[\\/\u0000-\u001f\u007f]/.test(value), 'Use a file name without path separators or control characters.'),
+  sizeBytes: z.number().int().positive().max(MAX_FESTIVAL_DOCUMENT_BYTES, 'Files must be 20 MB or smaller.'),
+}).strict().transform((input, context) => {
+  const contentType = festivalDocumentContentType(input.fileName)
+  if (!contentType) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['fileName'],
+      message: 'Use a PDF, DOCX, XLSX, PNG, or JPEG file.',
+    })
+    return z.NEVER
+  }
+  return { ...input, contentType }
+})
+
+export const festivalDocumentIdSchema = z.object({
+  festivalId: z.string().trim().min(1).max(191),
+  documentId: z.string().trim().min(1).max(191),
+}).strict()
+
 export const festivalFinanceUnlinkSchema = z.object({
   festivalId: z.string().trim().min(1).max(191),
   linkId: z.string().trim().min(1).max(191),
@@ -157,3 +195,4 @@ export type FestivalApprovalDecisionInput = z.infer<typeof festivalApprovalDecis
 export type FestivalLogisticsItemInput = z.infer<typeof festivalLogisticsItemSchema>
 export type FestivalLogisticsItemUpdateInput = z.infer<typeof festivalLogisticsItemUpdateSchema>
 export type FestivalLogisticsStatusInput = z.infer<typeof festivalLogisticsStatusSchema>
+export type FestivalDocumentUploadInput = z.infer<typeof festivalDocumentUploadSchema>

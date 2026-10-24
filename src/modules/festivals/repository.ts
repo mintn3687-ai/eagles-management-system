@@ -212,6 +212,28 @@ export const festivalsRepository = {
   createLogisticsItem: (tx: Transaction, input: Prisma.FestivalLogisticsItemUncheckedCreateInput) =>
     tx.festivalLogisticsItem.create({ data: input }),
 
+  createFestivalDocument: (tx: Transaction, input: Prisma.FestivalDocumentUncheckedCreateInput) =>
+    tx.festivalDocument.create({ data: input }),
+
+  findFestivalDocument: (festivalId: string, documentId: string) =>
+    prisma.festivalDocument.findFirst({
+      where: { id: documentId, festivalId },
+    }),
+
+  markFestivalDocumentReady: (tx: Transaction, festivalId: string, documentId: string, now: Date) =>
+    tx.festivalDocument.updateMany({
+      where: {
+        id: documentId,
+        festivalId,
+        status: 'PENDING_UPLOAD',
+        uploadExpiresAt: { gt: now },
+      },
+      data: { status: 'READY', uploadedAt: now },
+    }),
+
+  deleteFestivalDocument: (tx: Transaction, festivalId: string, documentId: string) =>
+    tx.festivalDocument.deleteMany({ where: { id: documentId, festivalId } }),
+
   findLogisticsItem: (tx: Transaction, festivalId: string, logisticsItemId: string) =>
     tx.festivalLogisticsItem.findFirst({
       where: { id: logisticsItemId, festivalId },
@@ -324,7 +346,7 @@ export const festivalsRepository = {
     tx.festivalFinanceLink.deleteMany({ where: { id: linkId, festivalId } }),
 
   planningData: async (festivalId: string) => {
-    const [categories, invitations, entries, budgetItems, financeLinks, approvals, logisticsItems, activeMembers] = await Promise.all([
+    const [categories, invitations, entries, budgetItems, financeLinks, approvals, logisticsItems, activeMembers, festivalDocuments] = await Promise.all([
       prisma.festivalEntryCategory.findMany({
         where: { festivalId },
         orderBy: [{ name: 'asc' }, { id: 'asc' }],
@@ -364,6 +386,22 @@ export const festivalsRepository = {
         orderBy: [{ member: { fullName: 'asc' } }, { memberId: 'asc' }],
         take: 300,
         select: { memberId: true, member: { select: { fullName: true } } },
+      }),
+      prisma.festivalDocument.findMany({
+        where: { festivalId },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 100,
+        select: {
+          id: true,
+          originalName: true,
+          contentType: true,
+          sizeBytes: true,
+          status: true,
+          uploadedById: true,
+          uploadExpiresAt: true,
+          uploadedAt: true,
+          createdAt: true,
+        },
       }),
     ])
     const productionIds = [...new Set(entries.flatMap((entry) => entry.productionId ? [entry.productionId] : []))]
@@ -480,6 +518,7 @@ export const festivalsRepository = {
         id: memberId,
         fullName: member.fullName,
       })),
+      festivalDocuments,
       unlinkedFinanceEntries,
       productionOptions,
       planApproval: approvalByTarget.get(`PLAN:${festivalId}`) ?? null,

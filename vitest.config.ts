@@ -23,5 +23,7 @@ export default defineConfig({
     'tests/festivals.test.ts',
     'tests/festivals-service.test.ts',
     'tests/festivals-actions.test.ts',
+    'tests/festivals-documents.test.ts',
+    'tests/festivals-document-routes.test.ts',
   ] },
 })

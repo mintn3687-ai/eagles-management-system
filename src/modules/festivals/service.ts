@@ -1,8 +1,10 @@
 import 'server-only'
+import { randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { writeAuditLog } from '@/lib/audit'
 import { nairobiDateKey, parseNairobiDate } from '@/lib/dates'
 import { festivalsRepository } from './repository'
+import { festivalDocumentStorage } from './storage'
 import {
   canTransitionEntry,
   FestivalApprovalRuleError,
@@ -27,10 +29,17 @@ import type {
   FestivalLogisticsItemUpdateInput,
   FestivalLogisticsStatusInput,
   FestivalPlanApprovalSubmitInput,
+  FestivalDocumentUploadInput,
   FestivalUpdateInput,
 } from './schema'
 
 export class FestivalServiceError extends Error {}
+
+export class FestivalDocumentServiceError extends Error {
+  constructor(message: string, public status: 400 | 404 | 409) {
+    super(message)
+  }
+}
 
 function mapError(error: unknown): never {
   if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
@@ -461,6 +470,137 @@ export async function getFestivalPlanning(festivalId: string) {
       approvedAmount: item.approval?.status === 'APPROVED' ? item.approval.approvedAmount : null,
     }))),
   }
+}
+
+export async function createFestivalDocumentUpload(input: FestivalDocumentUploadInput, actorId: string) {
+  const storageKey = `festivals/${input.festivalId}/${randomUUID()}`
+  const uploadExpiresAt = new Date(Date.now() + 10 * 60 * 1000)
+  const uploadUrl = await festivalDocumentStorage.createUploadUrl({
+    storageKey,
+    contentType: input.contentType,
+    sizeBytes: input.sizeBytes,
+  })
+
+  const document = await festivalsRepository.transaction(async (tx) => {
+    if (!await festivalsRepository.festivalExists(tx, input.festivalId)) {
+      throw new FestivalDocumentServiceError('Festival not found.', 404)
+    }
+    const created = await festivalsRepository.createFestivalDocument(tx, {
+      festivalId: input.festivalId,
+      originalName: input.fileName,
+      contentType: input.contentType,
+      sizeBytes: input.sizeBytes,
+      storageKey,
+      uploadedById: actorId,
+      uploadExpiresAt,
+    })
+    await writeAuditLog(tx, {
+      actorId,
+      action: 'FESTIVAL_DOCUMENT_UPLOAD_STARTED',
+      entity: 'FestivalDocument',
+      entityId: created.id,
+      details: {
+        festivalId: input.festivalId,
+        originalName: input.fileName,
+        contentType: input.contentType,
+        sizeBytes: input.sizeBytes,
+        uploadExpiresAt: uploadExpiresAt.toISOString(),
+      },
+    })
+    return created
+  })
+
+  return {
+    documentId: document.id,
+    uploadExpiresAt,
+    uploadUrl,
+    contentType: input.contentType,
+  }
+}
+
+export async function completeFestivalDocumentUpload(
+  festivalId: string,
+  documentId: string,
+  actorId: string,
+) {
+  const document = await festivalsRepository.findFestivalDocument(festivalId, documentId)
+  if (!document) throw new FestivalDocumentServiceError('Festival document not found.', 404)
+  if (document.status === 'READY') return document
+  if (document.status !== 'PENDING_UPLOAD' || document.uploadExpiresAt <= new Date()) {
+    throw new FestivalDocumentServiceError('This upload has expired. Start the upload again.', 409)
+  }
+
+  const uploadedObject = await festivalDocumentStorage.headObject(document.storageKey)
+  if (!uploadedObject) throw new FestivalDocumentServiceError('The file has not finished uploading.', 409)
+  if (uploadedObject.sizeBytes !== document.sizeBytes || uploadedObject.contentType !== document.contentType) {
+    await festivalDocumentStorage.deleteObject(document.storageKey)
+    throw new FestivalDocumentServiceError('The uploaded file did not match the requested file details.', 409)
+  }
+
+  const now = new Date()
+  const updatedCount = await festivalsRepository.transaction(async (tx) => {
+    const updated = await festivalsRepository.markFestivalDocumentReady(tx, festivalId, documentId, now)
+    if (updated.count) {
+      await writeAuditLog(tx, {
+        actorId,
+        action: 'FESTIVAL_DOCUMENT_UPLOADED',
+        entity: 'FestivalDocument',
+        entityId: document.id,
+        details: {
+          festivalId,
+          originalName: document.originalName,
+          contentType: document.contentType,
+          sizeBytes: document.sizeBytes,
+          uploadedAt: now.toISOString(),
+        },
+      })
+    }
+    return updated.count
+  })
+  if (!updatedCount) {
+    const latest = await festivalsRepository.findFestivalDocument(festivalId, documentId)
+    if (latest?.status === 'READY') return latest
+    throw new FestivalDocumentServiceError('This upload has expired or was already removed.', 409)
+  }
+
+  return { ...document, status: 'READY' as const, uploadedAt: now }
+}
+
+export async function getFestivalDocumentDownload(festivalId: string, documentId: string) {
+  const document = await festivalsRepository.findFestivalDocument(festivalId, documentId)
+  if (!document) throw new FestivalDocumentServiceError('Festival document not found.', 404)
+  if (document.status !== 'READY') {
+    throw new FestivalDocumentServiceError('This document is not ready to download.', 409)
+  }
+  const url = await festivalDocumentStorage.createDownloadUrl({
+    storageKey: document.storageKey,
+    fileName: document.originalName,
+    contentType: document.contentType,
+  })
+  return { url }
+}
+
+export async function deleteFestivalDocument(festivalId: string, documentId: string, actorId: string) {
+  const document = await festivalsRepository.findFestivalDocument(festivalId, documentId)
+  if (!document) throw new FestivalDocumentServiceError('Festival document not found.', 404)
+
+  await festivalDocumentStorage.deleteObject(document.storageKey)
+  await festivalsRepository.transaction(async (tx) => {
+    const deleted = await festivalsRepository.deleteFestivalDocument(tx, festivalId, documentId)
+    if (!deleted.count) throw new FestivalDocumentServiceError('Festival document not found.', 404)
+    await writeAuditLog(tx, {
+      actorId,
+      action: 'FESTIVAL_DOCUMENT_DELETED',
+      entity: 'FestivalDocument',
+      entityId: document.id,
+      details: {
+        festivalId,
+        originalName: document.originalName,
+        contentType: document.contentType,
+        sizeBytes: document.sizeBytes,
+      },
+    })
+  })
 }
 
 export async function createFestivalLogisticsItem(input: FestivalLogisticsItemInput, actorId: string) {
