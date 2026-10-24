@@ -18,6 +18,10 @@ Phase 6 migration file: `prisma/migrations/20261024130000_festival_logistics/mig
 
 No database migration was run. Preview may share Production data, so verify the target database is isolated and explicitly approve before deploying any migration to any database.
 
+### Migration procedure
+
+Only after the user explicitly approves the migrations and the target is confirmed to be an isolated development/test database, configure Prisma's `DATABASE_URL_UNPOOLED` (`directUrl`) for that isolated database, then run `npx prisma migrate deploy` and verify with `npx prisma migrate status`. Do not apply these migrations to Preview or Production without separate explicit approval. No migration command was run as part of this implementation.
+
 ## How to use
 
 1. Sign in with a Committee or Super Admin account.
