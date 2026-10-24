@@ -343,6 +343,7 @@ export async function updateFestivalBudgetItemAction(_state: FestivalActionState
 export async function submitFestivalPlanApprovalAction(_state: FestivalActionState, form: FormData): Promise<FestivalActionState> {
   try {
     const actor = await requirePermission('festivals:approve')
+    await requirePermission('finance:manage')
     const parsed = festivalPlanApprovalSubmitSchema.safeParse({ festivalId: value(form, 'festivalId') })
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Choose a festival plan.' }
     await submitFestivalPlanApproval(parsed.data, actor.id)
@@ -383,7 +384,10 @@ export async function decideFestivalApprovalAction(_state: FestivalActionState, 
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Check the approval decision.' }
     const result = await decideFestivalApproval(parsed.data, actor.id)
     refresh()
-    return { success: true, message: `Request ${result.status.toLowerCase()}.` }
+    const budgetMessage = result.includedBudgetApprovals
+      ? ` ${result.includedBudgetApprovals} pending budget request(s) were also ${result.status.toLowerCase()}.`
+      : ''
+    return { success: true, message: `Request ${result.status.toLowerCase()}.${budgetMessage}` }
   } catch (error) {
     return actionError(error)
   }

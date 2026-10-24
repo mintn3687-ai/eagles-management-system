@@ -303,6 +303,15 @@ export const festivalsRepository = {
     data: input,
   }),
 
+  refreshPendingApproval: (
+    tx: Transaction,
+    targetKey: string,
+    input: Prisma.FestivalApprovalUpdateManyMutationInput,
+  ) => tx.festivalApproval.updateMany({
+    where: { targetKey, status: 'PENDING' },
+    data: input,
+  }),
+
   updatePendingApprovalAmount: (tx: Transaction, targetKey: string, requestedAmount: number) =>
     tx.festivalApproval.updateMany({
       where: { targetKey, status: 'PENDING', type: 'BUDGET' },
@@ -320,6 +329,19 @@ export const festivalsRepository = {
     where: { id: approvalId, status: 'PENDING' },
     data: input,
   }),
+
+  pendingBudgetApprovals: (tx: Transaction, festivalId: string) =>
+    tx.festivalApproval.findMany({
+      where: { festivalId, type: 'BUDGET', status: 'PENDING' },
+      orderBy: [{ submittedAt: 'asc' }, { id: 'asc' }],
+    }),
+
+  budgetItemsForProposal: (tx: Transaction, festivalId: string) =>
+    tx.festivalBudgetItem.findMany({
+      where: { festivalId },
+      orderBy: [{ type: 'asc' }, { category: 'asc' }, { id: 'asc' }],
+      select: { id: true, plannedAmount: true },
+    }),
 
   findFinanceEntry: (tx: Transaction, financeEntryId: string) =>
     tx.financeEntry.findUnique({
@@ -345,41 +367,42 @@ export const festivalsRepository = {
   deleteFinanceLink: (tx: Transaction, festivalId: string, linkId: string) =>
     tx.festivalFinanceLink.deleteMany({ where: { id: linkId, festivalId } }),
 
-  planningData: async (festivalId: string) => {
+  planningData: async (festivalId: string, includeAllRecords = false) => {
     const [categories, invitations, entries, budgetItems, financeLinks, approvals, logisticsItems, activeMembers, festivalDocuments] = await Promise.all([
       prisma.festivalEntryCategory.findMany({
         where: { festivalId },
         orderBy: [{ name: 'asc' }, { id: 'asc' }],
-        take: 100,
+        take: includeAllRecords ? undefined : 100,
       }),
       prisma.festivalInvitation.findMany({
         where: { festivalId },
         orderBy: [{ receivedAt: 'desc' }, { id: 'desc' }],
-        take: 100,
+        take: includeAllRecords ? undefined : 100,
       }),
       prisma.festivalEntry.findMany({
         where: { festivalId },
         orderBy: [{ deadline: 'asc' }, { createdAt: 'desc' }, { id: 'desc' }],
-        take: 100,
+        take: includeAllRecords ? undefined : 100,
       }),
       prisma.festivalBudgetItem.findMany({
         where: { festivalId },
         orderBy: [{ type: 'asc' }, { category: 'asc' }, { id: 'asc' }],
-        take: 100,
+        take: includeAllRecords ? undefined : 100,
       }),
       prisma.festivalFinanceLink.findMany({
         where: { festivalId },
         orderBy: [{ linkedAt: 'desc' }, { id: 'desc' }],
+        take: includeAllRecords ? undefined : 100,
       }),
       prisma.festivalApproval.findMany({
         where: { festivalId },
         orderBy: [{ submittedAt: 'desc' }, { id: 'desc' }],
-        take: 200,
+        take: includeAllRecords ? undefined : 200,
       }),
       prisma.festivalLogisticsItem.findMany({
         where: { festivalId },
         orderBy: [{ dueAt: 'asc' }, { createdAt: 'desc' }, { id: 'desc' }],
-        take: 200,
+        take: includeAllRecords ? undefined : 200,
       }),
       prisma.seasonMembership.findMany({
         where: { status: 'ACTIVE', season: { isCurrent: true } },
@@ -390,7 +413,7 @@ export const festivalsRepository = {
       prisma.festivalDocument.findMany({
         where: { festivalId },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-        take: 100,
+        take: includeAllRecords ? undefined : 100,
         select: {
           id: true,
           originalName: true,
@@ -522,6 +545,7 @@ export const festivalsRepository = {
       unlinkedFinanceEntries,
       productionOptions,
       planApproval: approvalByTarget.get(`PLAN:${festivalId}`) ?? null,
+      approvalHistory: [...approvalByTarget.values()],
     }
   },
 }

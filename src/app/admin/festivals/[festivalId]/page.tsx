@@ -44,7 +44,10 @@ export default async function FestivalDetailPage({ params }: {
     <FestivalUpdateForm festival={festival} today={today} />
     <section className="card space-y-3">
       <h2>Festival plan approval</h2>
-      <p className="text-sm text-slate-600">Any committee member may approve, including the person who submitted. Editing an approved plan returns it to Pending for approval again.</p>
+      <p className="text-sm text-slate-600">Review the complete proposal in one PDF. A plan decision also decides all pending budget requests at their planned amounts; previously approved budget lines retain their recorded decisions.</p>
+      <a className="button-secondary inline-flex" href={`/api/admin/festivals/${encodeURIComponent(festivalId)}/proposal`}>
+        Download proposal PDF
+      </a>
       {planning.planApproval
         ? <div className="space-y-2">
           <p className="font-medium">Status: {planning.planApproval.status.toLowerCase()}</p>
@@ -53,7 +56,16 @@ export default async function FestivalDetailPage({ params }: {
             {planning.planApproval.status === 'APPROVED' ? 'Approved' : 'Rejected'} by {planning.planApproval.decidedByName} · {formatNairobiDate(planning.planApproval.decidedAt, true)}
           </p>}
           {planning.planApproval.decisionReason && <p className="text-sm text-slate-600">Reason: {planning.planApproval.decisionReason}</p>}
-          {planning.planApproval.status === 'PENDING' && <FestivalApprovalDecisionForm approval={planning.planApproval} />}
+          {planning.planApproval.status === 'PENDING' && <FestivalApprovalDecisionForm
+            approval={planning.planApproval}
+            pendingBudgetItems={planning.budgetItems
+              .filter((item) => item.approval?.status === 'PENDING')
+              .map((item) => ({
+                type: item.type,
+                category: item.category,
+                plannedAmount: item.plannedAmount,
+              }))}
+          />}
           {planning.planApproval.status === 'REJECTED' && <FestivalPlanApprovalRequestForm festivalId={festivalId} />}
         </div>
         : <div>
@@ -194,7 +206,7 @@ export default async function FestivalDetailPage({ params }: {
               <summary className="cursor-pointer text-sm text-emerald-800">Edit budget item</summary>
               <div className="mt-2"><FestivalBudgetItemForm festivalId={festivalId} budgetItem={item} /></div>
             </details>
-            {item.approval?.status === 'PENDING' && <FestivalApprovalDecisionForm approval={item.approval} />}
+            {item.approval?.status === 'PENDING' && <p className="text-sm text-amber-800">Pending review in the Festival plan approval section above.</p>}
             {(!item.approval || item.approval.status === 'REJECTED') && <FestivalBudgetApprovalRequestForm festivalId={festivalId} budgetItemId={item.id} />}
           </li>)}
         </ul> : <p className="text-slate-600">No festival budget items recorded yet.</p>}

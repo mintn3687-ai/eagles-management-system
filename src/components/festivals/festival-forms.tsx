@@ -376,15 +376,28 @@ export function FestivalBudgetApprovalRequestForm({ festivalId, budgetItemId }: 
   </Form>
 }
 
-export function FestivalApprovalDecisionForm({ approval }: {
+export function FestivalApprovalDecisionForm({ approval, pendingBudgetItems = [] }: {
   approval: {
     id: string
     type: string
     requestedAmount: number | null
   }
+  pendingBudgetItems?: Array<{
+    type: string
+    category: string
+    plannedAmount: number
+  }>
 }) {
-  return <Form action={decideFestivalApprovalAction} submit="Save decision">
+  return <Form action={decideFestivalApprovalAction} submit={approval.type === 'PLAN' ? 'Save proposal decision' : 'Save decision'}>
     <input type="hidden" name="approvalId" value={approval.id} />
+    {approval.type === 'PLAN' && <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3">
+      <p className="font-medium">This decision covers the festival plan and {pendingBudgetItems.length} pending budget request(s) at their planned amounts.</p>
+      {pendingBudgetItems.length > 0 && <ul className="mt-2 space-y-1 text-sm">
+        {pendingBudgetItems.map((item, index) => <li key={`${item.category}-${index}`}>
+          {item.type} · {item.category} · {formatKES(item.plannedAmount)}
+        </li>)}
+      </ul>}
+    </div>}
     <div><label className="label" htmlFor={`approval-decision-${approval.id}`}>Decision</label>
       <select className="input" id={`approval-decision-${approval.id}`} name="decision" defaultValue="APPROVED">
         <option value="APPROVED">Approve</option>
@@ -398,7 +411,7 @@ export function FestivalApprovalDecisionForm({ approval }: {
     </div>}
     <div><label className="label" htmlFor={`approval-reason-${approval.id}`}>Decision reason</label>
       <textarea className="input" id={`approval-reason-${approval.id}`} name="reason" maxLength={1000} rows={2} />
-      <p className="mt-1 text-sm text-slate-600">Required when rejecting or approving less than requested.</p>
+      <p className="mt-1 text-sm text-slate-600">{approval.type === 'PLAN' ? 'Required when rejecting the proposal.' : 'Required when rejecting or approving less than requested.'}</p>
     </div>
   </Form>
 }
