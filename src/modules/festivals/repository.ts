@@ -1,6 +1,7 @@
 import 'server-only'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
+import { sumLinkedFinanceAmounts } from './rules'
 import type { FestivalEntryStatus } from './rules'
 
 type Transaction = Prisma.TransactionClient
@@ -81,8 +82,41 @@ export const festivalsRepository = {
       data,
     }),
 
+  createBudgetItem: (tx: Transaction, input: Prisma.FestivalBudgetItemUncheckedCreateInput) =>
+    tx.festivalBudgetItem.create({ data: input }),
+
+  findBudgetItem: (tx: Transaction, festivalId: string, budgetItemId: string) =>
+    tx.festivalBudgetItem.findFirst({
+      where: { id: budgetItemId, festivalId },
+      select: { id: true, type: true, category: true, plannedAmount: true },
+    }),
+
+  findFinanceEntry: (tx: Transaction, financeEntryId: string) =>
+    tx.financeEntry.findUnique({
+      where: { id: financeEntryId },
+      select: { id: true, type: true, amount: true, category: true, description: true, occurredAt: true },
+    }),
+
+  findFinanceLinkByEntry: (tx: Transaction, financeEntryId: string) =>
+    tx.festivalFinanceLink.findUnique({
+      where: { financeEntryId },
+      select: { id: true },
+    }),
+
+  createFinanceLink: (tx: Transaction, input: Prisma.FestivalFinanceLinkUncheckedCreateInput) =>
+    tx.festivalFinanceLink.create({ data: input }),
+
+  findFinanceLink: (tx: Transaction, festivalId: string, linkId: string) =>
+    tx.festivalFinanceLink.findFirst({
+      where: { id: linkId, festivalId },
+      select: { id: true, budgetItemId: true, financeEntryId: true },
+    }),
+
+  deleteFinanceLink: (tx: Transaction, festivalId: string, linkId: string) =>
+    tx.festivalFinanceLink.deleteMany({ where: { id: linkId, festivalId } }),
+
   planningData: async (festivalId: string) => {
-    const [categories, invitations, entries] = await Promise.all([
+    const [categories, invitations, entries, budgetItems, financeLinks] = await Promise.all([
       prisma.festivalEntryCategory.findMany({
         where: { festivalId },
         orderBy: [{ name: 'asc' }, { id: 'asc' }],
@@ -98,16 +132,57 @@ export const festivalsRepository = {
         orderBy: [{ deadline: 'asc' }, { createdAt: 'desc' }, { id: 'desc' }],
         take: 100,
       }),
+      prisma.festivalBudgetItem.findMany({
+        where: { festivalId },
+        orderBy: [{ type: 'asc' }, { category: 'asc' }, { id: 'asc' }],
+        take: 100,
+      }),
+      prisma.festivalFinanceLink.findMany({
+        where: { festivalId },
+        orderBy: [{ linkedAt: 'desc' }, { id: 'desc' }],
+      }),
     ])
     const productionIds = [...new Set(entries.flatMap((entry) => entry.productionId ? [entry.productionId] : []))]
-    const productions = productionIds.length
-      ? await prisma.production.findMany({
+    const linkedFinanceEntryIds = [...new Set(financeLinks.map((link) => link.financeEntryId))]
+    const [productions, linkedFinanceEntries, recentFinanceEntries] = await Promise.all([
+      productionIds.length
+        ? prisma.production.findMany({
         where: { id: { in: productionIds } },
         select: { id: true, title: true },
       })
+        : Promise.resolve([]),
+      linkedFinanceEntryIds.length
+        ? prisma.financeEntry.findMany({
+          where: { id: { in: linkedFinanceEntryIds } },
+          select: { id: true, type: true, amount: true, category: true, description: true, occurredAt: true },
+        })
+        : Promise.resolve([]),
+      prisma.financeEntry.findMany({
+        orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+        take: 200,
+        select: { id: true, type: true, amount: true, category: true, description: true, occurredAt: true },
+      }),
+    ])
+    const recentLinks = recentFinanceEntries.length
+      ? await prisma.festivalFinanceLink.findMany({
+        where: { financeEntryId: { in: recentFinanceEntries.map((entry) => entry.id) } },
+        select: { financeEntryId: true },
+      })
       : []
+    const alreadyLinked = new Set(recentLinks.map((link) => link.financeEntryId))
+    const unlinkedFinanceEntries = recentFinanceEntries.filter((entry) => !alreadyLinked.has(entry.id)).slice(0, 100)
     const categoryNames = new Map(categories.map((category) => [category.id, category.name]))
     const productionNames = new Map(productions.map((production) => [production.id, production.title]))
+    const financeEntries = new Map(linkedFinanceEntries.map((entry) => [entry.id, entry]))
+    const budgetAmounts = new Map<string, number[]>()
+    for (const link of financeLinks) {
+      const linked = financeEntries.get(link.financeEntryId)
+      if (linked) {
+        const amounts = budgetAmounts.get(link.budgetItemId) ?? []
+        amounts.push(linked.amount)
+        budgetAmounts.set(link.budgetItemId, amounts)
+      }
+    }
     const productionOptions = await prisma.production.findMany({
       orderBy: [{ title: 'asc' }, { id: 'asc' }],
       take: 100,
@@ -121,6 +196,17 @@ export const festivalsRepository = {
         categoryName: categoryNames.get(entry.categoryId) ?? 'Unknown category',
         productionTitle: entry.productionId ? productionNames.get(entry.productionId) ?? 'Unknown production' : null,
       })),
+      budgetItems: budgetItems.map((item) => ({
+        ...item,
+        actualAmount: sumLinkedFinanceAmounts(budgetAmounts.get(item.id) ?? []),
+        links: financeLinks
+          .filter((link) => link.budgetItemId === item.id)
+          .map((link) => ({
+            ...link,
+            financeEntry: financeEntries.get(link.financeEntryId) ?? null,
+          })),
+      })),
+      unlinkedFinanceEntries,
       productionOptions,
     }
   },

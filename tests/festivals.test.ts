@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { hasPermission } from '../src/lib/permission-rules'
 import {
   entryCategorySchema,
+  festivalBudgetItemSchema,
   festivalCreateSchema,
+  festivalFinanceLinkSchema,
   festivalEntryCreateSchema,
   festivalUpdateSchema,
   invitationCreateSchema,
@@ -11,6 +13,7 @@ import {
   canTransitionEntry,
   isEntryOverdue,
   isInvitationOverdue,
+  summarizeFestivalBudget,
 } from '../src/modules/festivals/rules'
 
 const createInput = {
@@ -84,6 +87,39 @@ describe('festival planning foundation', () => {
     expect(isEntryOverdue('PREPARING', '2027-03-02', '2027-03-02')).toBe(false)
     expect(isInvitationOverdue('RECEIVED', '2027-02-01', '2027-02-02')).toBe(true)
     expect(isInvitationOverdue('ACCEPTED', '2027-02-01', '2027-02-02')).toBe(false)
+  })
+
+  it('validates festival budget amounts and explicit finance entry links', () => {
+    expect(festivalBudgetItemSchema.safeParse({
+      festivalId: 'festival-id',
+      type: 'EXPENSE',
+      category: 'Transport',
+      plannedAmount: 50000,
+      notes: '',
+    }).success).toBe(true)
+    expect(festivalBudgetItemSchema.safeParse({
+      festivalId: 'festival-id',
+      type: 'EXPENSE',
+      category: 'Transport',
+      plannedAmount: 12.5,
+      notes: '',
+    }).success).toBe(false)
+    expect(festivalFinanceLinkSchema.safeParse({
+      festivalId: 'festival-id',
+      budgetItemId: 'budget-item-id',
+      financeEntryId: 'finance-entry-id',
+    }).success).toBe(true)
+  })
+
+  it('summarizes planned and actual KES separately for budget income and expenses', () => {
+    expect(summarizeFestivalBudget([
+      { type: 'INCOME', plannedAmount: 100000, actualAmount: 20000 },
+      { type: 'EXPENSE', plannedAmount: 80000, actualAmount: 85000 },
+      { type: 'EXPENSE', plannedAmount: 10000, actualAmount: 0 },
+    ])).toEqual({
+      INCOME: { planned: 100000, actual: 20000 },
+      EXPENSE: { planned: 90000, actual: 85000 },
+    })
   })
 
   it('restricts festival planning to committee and super admins', () => {

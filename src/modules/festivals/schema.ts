@@ -76,9 +76,31 @@ export const festivalEntryStatusSchema = z.object({
   status: z.enum(['PREPARING', 'SUBMITTED', 'CONFIRMED', 'REJECTED']),
 }).strict()
 
+export const festivalBudgetItemSchema = z.object({
+  festivalId: z.string().trim().min(1).max(191),
+  type: z.enum(['INCOME', 'EXPENSE']),
+  category: z.string().trim().min(2, 'Enter a budget category.').max(120),
+  plannedAmount: z.number().int().safe().positive('Enter a positive amount in KES.').max(2_147_483_647),
+  notes: z.string().trim().max(1000).default(''),
+}).strict()
+
+export const festivalFinanceLinkSchema = z.object({
+  festivalId: z.string().trim().min(1).max(191),
+  budgetItemId: z.string().trim().min(1).max(191),
+  financeEntryId: z.string().trim().min(1).max(191),
+}).strict()
+
+export const festivalFinanceUnlinkSchema = z.object({
+  festivalId: z.string().trim().min(1).max(191),
+  linkId: z.string().trim().min(1).max(191),
+}).strict()
+
 export type FestivalCreateInput = z.infer<typeof festivalCreateSchema>
 export type FestivalUpdateInput = z.infer<typeof festivalUpdateSchema>
 export type FestivalInvitationCreateInput = z.infer<typeof invitationCreateSchema>
 export type EntryCategoryInput = z.infer<typeof entryCategorySchema>
 export type EntryCategoryUpdateInput = z.infer<typeof entryCategoryUpdateSchema>
 export type FestivalEntryCreateInput = z.infer<typeof festivalEntryCreateSchema>
+export type FestivalBudgetItemInput = z.infer<typeof festivalBudgetItemSchema>
+export type FestivalFinanceLinkInput = z.infer<typeof festivalFinanceLinkSchema>
+export type FestivalFinanceUnlinkInput = z.infer<typeof festivalFinanceUnlinkSchema>

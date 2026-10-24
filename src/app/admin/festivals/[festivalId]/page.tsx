@@ -1,10 +1,14 @@
 import { notFound } from 'next/navigation'
 import { formatNairobiDate, nairobiDateKey } from '@/lib/dates'
+import { formatKES } from '@/lib/money'
 import { pagePermission } from '@/lib/page-access'
 import {
+  FestivalBudgetItemForm,
   FestivalCategoryForm,
   FestivalEntryForm,
   FestivalEntryStatusForm,
+  FestivalFinanceLinkForm,
+  FestivalFinanceUnlinkForm,
   FestivalInvitationForm,
   FestivalInvitationStatusForm,
   FestivalUpdateForm,
@@ -16,6 +20,7 @@ export default async function FestivalDetailPage({ params }: {
   params: Promise<{ festivalId: string }>
 }) {
   await pagePermission('festivals:manage')
+  await pagePermission('finance:manage')
   const { festivalId } = await params
   const festival = await getFestival(festivalId)
   if (!festival) notFound()
@@ -107,6 +112,53 @@ export default async function FestivalDetailPage({ params }: {
             </li>
           })}
         </ul> : <p className="text-slate-600">No competition entries recorded yet.</p>}
+      </div>
+    </section>
+
+    <section className="space-y-4">
+      <header>
+        <h2>Festival budget and actuals</h2>
+        <p className="text-slate-600">Plan income and expenses, then explicitly link existing finance-ledger entries. Each ledger entry links to one budget item for its full amount; linking never creates or changes a transaction.</p>
+        <p className="text-sm text-slate-600">The selector shows up to 100 of the most recent unlinked ledger entries.</p>
+      </header>
+      <FestivalBudgetItemForm festivalId={festivalId} />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="card space-y-1">
+          <h3>Planned income</h3>
+          <p>{formatKES(planning.budgetSummary.INCOME.planned)}</p>
+          <p className="text-sm text-slate-600">Actual linked: {formatKES(planning.budgetSummary.INCOME.actual)}</p>
+        </div>
+        <div className="card space-y-1">
+          <h3>Planned expenses</h3>
+          <p>{formatKES(planning.budgetSummary.EXPENSE.planned)}</p>
+          <p className="text-sm text-slate-600">Actual linked: {formatKES(planning.budgetSummary.EXPENSE.actual)}</p>
+        </div>
+      </div>
+      <div className="card space-y-3">
+        <h3>Budget register</h3>
+        {planning.budgetItems.length ? <ul className="divide-y divide-slate-100">
+          {planning.budgetItems.map((item) => <li className="space-y-2 py-3" key={item.id}>
+            <p className="font-medium">{item.type} · {item.category}</p>
+            <p className="text-sm text-slate-600">
+              Planned: {formatKES(item.plannedAmount)} · Actual linked: {formatKES(item.actualAmount)} · Approved: not tracked yet
+            </p>
+            {item.notes && <p className="text-sm text-slate-600">{item.notes}</p>}
+            {item.links.length ? <ul className="ml-4 list-disc space-y-1 text-sm">
+              {item.links.map((link) => <li className="flex flex-wrap items-center gap-2" key={link.id}>
+                {link.financeEntry
+                  ? `${formatNairobiDate(link.financeEntry.occurredAt)} · ${link.financeEntry.category} · ${formatKES(link.financeEntry.amount)} · ${link.financeEntry.description}`
+                  : 'Linked ledger entry unavailable'}
+                <FestivalFinanceUnlinkForm festivalId={festivalId} linkId={link.id} />
+              </li>)}
+            </ul> : <p className="text-sm text-slate-600">No actual ledger entries linked.</p>}
+            <FestivalFinanceLinkForm
+              festivalId={festivalId}
+              budgetItem={item}
+              entries={planning.unlinkedFinanceEntries}
+            />
+          </li>)}
+        </ul> : <p className="text-slate-600">No festival budget items recorded yet.</p>}
+        <p className="text-sm text-slate-600">Budget approvals and approved amounts will be added in Phase 5.</p>
       </div>
     </section>
   </div>

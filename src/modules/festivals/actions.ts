@@ -6,7 +6,10 @@ import {
   entryCategorySchema,
   entryCategoryUpdateSchema,
   festivalCreateSchema,
+  festivalBudgetItemSchema,
   festivalEntryCreateSchema,
+  festivalFinanceLinkSchema,
+  festivalFinanceUnlinkSchema,
   festivalEntryStatusSchema,
   invitationCreateSchema,
   invitationStatusSchema,
@@ -16,8 +19,11 @@ import {
   createFestivalCategory,
   createFestivalEntry,
   createFestivalInvitation,
+  createFestivalBudgetItem,
   createFestival,
   FestivalServiceError,
+  linkFestivalFinanceEntry,
+  unlinkFestivalFinanceEntry,
   updateFestivalEntryStatus,
   updateFestivalCategory,
   updateFestivalInvitationStatus,
@@ -44,6 +50,12 @@ function actionError(error: unknown): FestivalActionState {
 function refresh(festivalId?: string) {
   revalidatePath('/admin/festivals')
   if (festivalId) revalidatePath(`/admin/festivals/${festivalId}`)
+}
+
+async function financeActor() {
+  const actor = await requirePermission('festivals:manage')
+  await requirePermission('finance:manage')
+  return actor
 }
 
 export async function createFestivalAction(_state: FestivalActionState, form: FormData): Promise<FestivalActionState> {
@@ -192,6 +204,59 @@ export async function updateFestivalEntryStatusAction(_state: FestivalActionStat
     await updateFestivalEntryStatus(parsed.data.festivalId, parsed.data.entryId, parsed.data.status, actor.id)
     refresh(parsed.data.festivalId)
     return { success: true, message: 'Festival entry status updated.' }
+  } catch (error) {
+    return actionError(error)
+  }
+}
+
+export async function createFestivalBudgetItemAction(_state: FestivalActionState, form: FormData): Promise<FestivalActionState> {
+  try {
+    const actor = await financeActor()
+    const rawAmount = value(form, 'plannedAmount').trim()
+    const parsed = festivalBudgetItemSchema.safeParse({
+      festivalId: value(form, 'festivalId'),
+      type: value(form, 'type'),
+      category: value(form, 'category'),
+      plannedAmount: rawAmount ? Number(rawAmount) : Number.NaN,
+      notes: value(form, 'notes'),
+    })
+    if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Check budget details.' }
+    await createFestivalBudgetItem(parsed.data, actor.id)
+    refresh(parsed.data.festivalId)
+    return { success: true, message: 'Festival budget item created.' }
+  } catch (error) {
+    return actionError(error)
+  }
+}
+
+export async function linkFestivalFinanceEntryAction(_state: FestivalActionState, form: FormData): Promise<FestivalActionState> {
+  try {
+    const actor = await financeActor()
+    const parsed = festivalFinanceLinkSchema.safeParse({
+      festivalId: value(form, 'festivalId'),
+      budgetItemId: value(form, 'budgetItemId'),
+      financeEntryId: value(form, 'financeEntryId'),
+    })
+    if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Choose a budget item and finance entry.' }
+    await linkFestivalFinanceEntry(parsed.data, actor.id)
+    refresh(parsed.data.festivalId)
+    return { success: true, message: 'Existing finance entry linked to the festival budget.' }
+  } catch (error) {
+    return actionError(error)
+  }
+}
+
+export async function unlinkFestivalFinanceEntryAction(_state: FestivalActionState, form: FormData): Promise<FestivalActionState> {
+  try {
+    const actor = await financeActor()
+    const parsed = festivalFinanceUnlinkSchema.safeParse({
+      festivalId: value(form, 'festivalId'),
+      linkId: value(form, 'linkId'),
+    })
+    if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Choose a finance link.' }
+    await unlinkFestivalFinanceEntry(parsed.data, actor.id)
+    refresh(parsed.data.festivalId)
+    return { success: true, message: 'Finance link removed; the original ledger entry is unchanged.' }
   } catch (error) {
     return actionError(error)
   }

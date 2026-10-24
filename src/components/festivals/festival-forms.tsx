@@ -7,13 +7,18 @@ import {
   createFestivalCategoryAction,
   createFestivalEntryAction,
   createFestivalInvitationAction,
+  createFestivalBudgetItemAction,
   createFestivalAction,
+  linkFestivalFinanceEntryAction,
+  unlinkFestivalFinanceEntryAction,
   updateFestivalEntryStatusAction,
   updateFestivalInvitationStatusAction,
   updateFestivalCategoryAction,
   updateFestivalAction,
 } from '@/modules/festivals/actions'
 import type { FestivalActionState } from '@/modules/festivals/actions'
+import { formatKES } from '@/lib/money'
+import { formatNairobiDate } from '@/lib/dates'
 
 type FestivalFormAction = (state: FestivalActionState, form: FormData) => Promise<FestivalActionState>
 type FestivalRecord = {
@@ -29,14 +34,24 @@ type FestivalRecord = {
 }
 type FestivalCategoryOption = { id: string; name: string; defaultDeadline: Date | null }
 type ProductionOption = { id: string; title: string }
+type BudgetItemOption = { id: string; type: string; category: string }
+type FinanceEntryOption = {
+  id: string
+  type: string
+  amount: number
+  category: string
+  description: string
+  occurredAt: Date
+}
 
-function Form({ action: serverAction, submit, children }: {
+function Form({ action: serverAction, submit, children, className = 'card space-y-4' }: {
   action: FestivalFormAction
   submit: string
   children: ReactNode
+  className?: string
 }) {
   const [state, action] = useActionState(serverAction, {})
-  return <form action={action} className="card space-y-4">
+  return <form action={action} className={className}>
     {children}
     {state.error && <p className="error" role="alert">{state.error}</p>}
     {state.success && <p className="text-sm text-emerald-800" role="status">{state.message}</p>}
@@ -201,5 +216,58 @@ export function FestivalEntryStatusForm({ festivalId, entryId, status }: {
     <select className="input" id={`entry-status-${entryId}`} name="status" defaultValue={nextStatuses[0].value}>
       {nextStatuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
     </select>
+  </Form>
+}
+
+export function FestivalBudgetItemForm({ festivalId }: { festivalId: string }) {
+  return <Form action={createFestivalBudgetItemAction} submit="Add budget item">
+    <input type="hidden" name="festivalId" value={festivalId} />
+    <h3>Plan income or expense</h3>
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div><label className="label" htmlFor="festival-budget-type">Budget type</label>
+        <select className="input" id="festival-budget-type" name="type" defaultValue="EXPENSE">
+          <option value="EXPENSE">Expense</option>
+          <option value="INCOME">Income</option>
+        </select>
+      </div>
+      <div><label className="label" htmlFor="festival-budget-category">Category</label>
+        <input className="input" id="festival-budget-category" name="category" maxLength={120} placeholder="Transport, registration, meals…" required />
+      </div>
+    </div>
+    <div><label className="label" htmlFor="festival-budget-planned">Planned amount (KES)</label>
+      <input className="input" id="festival-budget-planned" name="plannedAmount" type="number" min="1" max="2147483647" step="1" required />
+    </div>
+    <div><label className="label" htmlFor="festival-budget-notes">Notes</label>
+      <textarea className="input" id="festival-budget-notes" name="notes" maxLength={1000} rows={2} />
+    </div>
+  </Form>
+}
+
+export function FestivalFinanceLinkForm({ festivalId, budgetItem, entries }: {
+  festivalId: string
+  budgetItem: BudgetItemOption
+  entries: FinanceEntryOption[]
+}) {
+  const matches = entries.filter((entry) => entry.type === budgetItem.type)
+  if (!matches.length) return <p className="text-sm text-slate-600">No unlinked {budgetItem.type.toLowerCase()} ledger entries are available.</p>
+  return <Form action={linkFestivalFinanceEntryAction} submit="Link existing ledger entry" className="flex flex-wrap items-end gap-2">
+    <input type="hidden" name="festivalId" value={festivalId} />
+    <input type="hidden" name="budgetItemId" value={budgetItem.id} />
+    <div className="min-w-64 flex-1">
+      <label className="label" htmlFor={`finance-entry-${budgetItem.id}`}>Existing {budgetItem.type.toLowerCase()} entry</label>
+      <select className="input" id={`finance-entry-${budgetItem.id}`} name="financeEntryId" required defaultValue="">
+        <option value="" disabled>Select a ledger entry</option>
+        {matches.map((entry) => <option key={entry.id} value={entry.id}>
+          {formatNairobiDate(entry.occurredAt)} · {entry.category} · {formatKES(entry.amount)} · {entry.description}
+        </option>)}
+      </select>
+    </div>
+  </Form>
+}
+
+export function FestivalFinanceUnlinkForm({ festivalId, linkId }: { festivalId: string; linkId: string }) {
+  return <Form action={unlinkFestivalFinanceEntryAction} submit="Remove link" className="flex items-center gap-2">
+    <input type="hidden" name="festivalId" value={festivalId} />
+    <input type="hidden" name="linkId" value={linkId} />
   </Form>
 }

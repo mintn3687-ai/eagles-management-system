@@ -3,25 +3,39 @@ import { Prisma } from '@prisma/client'
 import { writeAuditLog } from '@/lib/audit'
 import { parseNairobiDate } from '@/lib/dates'
 import { festivalsRepository } from './repository'
-import { canTransitionEntry } from './rules'
+import { canTransitionEntry, summarizeFestivalBudget } from './rules'
 import type { FestivalEntryStatus } from './rules'
 import type {
   EntryCategoryInput,
   EntryCategoryUpdateInput,
+  FestivalBudgetItemInput,
   FestivalCreateInput,
   FestivalEntryCreateInput,
   FestivalInvitationCreateInput,
+  FestivalFinanceLinkInput,
+  FestivalFinanceUnlinkInput,
   FestivalUpdateInput,
 } from './schema'
 
 export class FestivalServiceError extends Error {}
 
 function mapError(error: unknown): never {
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+    throw new FestivalServiceError('Festival not found.')
+  }
+  throw error
+}
+
+function mapCategoryError(error: unknown): never {
   if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
     throw new FestivalServiceError('A category with this name already exists for the festival.')
   }
-  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
-    throw new FestivalServiceError('Festival not found.')
+  throw error
+}
+
+function mapFinanceLinkError(error: unknown): never {
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+    throw new FestivalServiceError('This finance entry is already linked to a festival budget item.')
   }
   throw error
 }
@@ -164,7 +178,7 @@ export async function createFestivalCategory(input: EntryCategoryInput, actorId:
       details: { festivalId: input.festivalId, name: input.name },
     })
     return category
-  }).catch(mapError)
+  }).catch(mapCategoryError)
 }
 
 export async function updateFestivalCategory(input: EntryCategoryUpdateInput, actorId: string) {
@@ -249,5 +263,93 @@ export async function updateFestivalEntryStatus(
 }
 
 export async function getFestivalPlanning(festivalId: string) {
-  return festivalsRepository.planningData(festivalId)
+  const planning = await festivalsRepository.planningData(festivalId)
+  return {
+    ...planning,
+    budgetSummary: summarizeFestivalBudget(planning.budgetItems),
+  }
+}
+
+export async function createFestivalBudgetItem(input: FestivalBudgetItemInput, actorId: string) {
+  return festivalsRepository.transaction(async (tx) => {
+    if (!await festivalsRepository.festivalExists(tx, input.festivalId)) {
+      throw new FestivalServiceError('Festival not found.')
+    }
+    const item = await festivalsRepository.createBudgetItem(tx, {
+      festivalId: input.festivalId,
+      type: input.type,
+      category: input.category,
+      plannedAmount: input.plannedAmount,
+      notes: input.notes || null,
+      createdById: actorId,
+    })
+    await writeAuditLog(tx, {
+      actorId,
+      action: 'FESTIVAL_BUDGET_ITEM_CREATED',
+      entity: 'FestivalBudgetItem',
+      entityId: item.id,
+      details: { festivalId: input.festivalId, type: item.type, category: item.category, plannedAmount: item.plannedAmount },
+    })
+    return item
+  }).catch(mapError)
+}
+
+export async function linkFestivalFinanceEntry(input: FestivalFinanceLinkInput, actorId: string) {
+  return festivalsRepository.transaction(async (tx) => {
+    const item = await festivalsRepository.findBudgetItem(tx, input.festivalId, input.budgetItemId)
+    if (!item) throw new FestivalServiceError('Budget item not found for this festival.')
+    const financeEntry = await festivalsRepository.findFinanceEntry(tx, input.financeEntryId)
+    if (!financeEntry) throw new FestivalServiceError('Finance entry not found.')
+    if (financeEntry.type !== item.type) {
+      throw new FestivalServiceError(`Link an ${item.type.toLowerCase()} finance entry to this budget item.`)
+    }
+    if (await festivalsRepository.findFinanceLinkByEntry(tx, financeEntry.id)) {
+      throw new FestivalServiceError('This finance entry is already linked to a festival budget item.')
+    }
+    const link = await festivalsRepository.createFinanceLink(tx, {
+      festivalId: input.festivalId,
+      budgetItemId: item.id,
+      financeEntryId: financeEntry.id,
+      linkedById: actorId,
+    })
+    await writeAuditLog(tx, {
+      actorId,
+      action: 'FESTIVAL_FINANCE_ENTRY_LINKED',
+      entity: 'FestivalFinanceLink',
+      entityId: link.id,
+      details: {
+        festivalId: input.festivalId,
+        budgetItemId: item.id,
+        financeEntryId: financeEntry.id,
+        amount: financeEntry.amount,
+        type: financeEntry.type,
+      },
+    })
+    return link
+  }).catch(mapFinanceLinkError)
+}
+
+export async function unlinkFestivalFinanceEntry(input: FestivalFinanceUnlinkInput, actorId: string) {
+  return festivalsRepository.transaction(async (tx) => {
+    const link = await festivalsRepository.findFinanceLink(tx, input.festivalId, input.linkId)
+    if (!link) throw new FestivalServiceError('Finance link not found for this festival.')
+    const financeEntry = await festivalsRepository.findFinanceEntry(tx, link.financeEntryId)
+    if (!financeEntry) throw new FestivalServiceError('Linked finance entry no longer exists.')
+    const removed = await festivalsRepository.deleteFinanceLink(tx, input.festivalId, link.id)
+    if (!removed.count) throw new FestivalServiceError('This finance link has already been removed.')
+    await writeAuditLog(tx, {
+      actorId,
+      action: 'FESTIVAL_FINANCE_ENTRY_UNLINKED',
+      entity: 'FestivalFinanceLink',
+      entityId: link.id,
+      details: {
+        festivalId: input.festivalId,
+        budgetItemId: link.budgetItemId,
+        financeEntryId: link.financeEntryId,
+        amount: financeEntry.amount,
+        type: financeEntry.type,
+      },
+    })
+    return { unlinked: true }
+  }).catch(mapError)
 }

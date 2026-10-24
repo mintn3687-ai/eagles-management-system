@@ -1,5 +1,6 @@
 export type FestivalEntryStatus = 'PENDING' | 'PREPARING' | 'SUBMITTED' | 'CONFIRMED' | 'REJECTED'
 export type FestivalInvitationStatus = 'RECEIVED' | 'ACCEPTED' | 'DECLINED'
+export type FestivalBudgetType = 'INCOME' | 'EXPENSE'
 
 const entryTransitions: Record<FestivalEntryStatus, FestivalEntryStatus[]> = {
   PENDING: ['PREPARING', 'SUBMITTED'],
@@ -19,4 +20,23 @@ export function isEntryOverdue(status: FestivalEntryStatus, deadline: string | n
 
 export function isInvitationOverdue(status: FestivalInvitationStatus, deadline: string | null, today: string) {
   return Boolean(deadline && deadline < today && status === 'RECEIVED')
+}
+
+export function sumLinkedFinanceAmounts(amounts: number[]) {
+  return amounts.reduce((total, amount) => total + amount, 0)
+}
+
+export function summarizeFestivalBudget(items: Array<{
+  type: FestivalBudgetType
+  plannedAmount: number
+  actualAmount: number
+}>) {
+  return items.reduce((totals, item) => {
+    totals[item.type].planned += item.plannedAmount
+    totals[item.type].actual += item.actualAmount
+    return totals
+  }, {
+    INCOME: { planned: 0, actual: 0 },
+    EXPENSE: { planned: 0, actual: 0 },
+  })
 }

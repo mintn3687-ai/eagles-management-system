@@ -165,6 +165,11 @@ enum FestivalEntryStatus {
   REJECTED
 }
 
+enum FestivalBudgetType {
+  INCOME
+  EXPENSE
+}
+
 enum ProductionTaskStatus {
   OPEN
   IN_PROGRESS
@@ -1237,6 +1242,35 @@ model FestivalEntry {
   @@index([categoryId])
   @@index([productionId])
   @@index([createdById])
+}
+
+model FestivalBudgetItem {
+  id            String            @id @default(cuid())
+  festivalId    String
+  type          FestivalBudgetType
+  category      String
+  plannedAmount Int
+  notes         String?
+  createdById   String
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([festivalId, type, category])
+  @@index([createdById])
+}
+
+model FestivalFinanceLink {
+  id             String   @id @default(cuid())
+  festivalId     String
+  budgetItemId   String
+  financeEntryId String   @unique
+  linkedById     String
+  linkedAt       DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([festivalId, budgetItemId])
+  @@index([linkedById])
 }
 
 model PushSubscription {
