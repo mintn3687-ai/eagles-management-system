@@ -1,12 +1,13 @@
 import 'server-only'
 import { Prisma } from '@prisma/client'
 import { writeAuditLog } from '@/lib/audit'
-import { parseNairobiDate } from '@/lib/dates'
+import { nairobiDateKey, parseNairobiDate } from '@/lib/dates'
 import { festivalsRepository } from './repository'
 import {
   canTransitionEntry,
   FestivalApprovalRuleError,
   summarizeFestivalBudget,
+  sumLinkedFinanceAmounts,
   validateBudgetApprovalAmount,
 } from './rules'
 import type { FestivalEntryStatus } from './rules'
@@ -77,6 +78,136 @@ function dateFields(input: { startDate: string | null; endDate: string | null })
 
 export async function listFestivals() {
   return festivalsRepository.list()
+}
+
+export async function getFestivalDashboard(today: string) {
+  const horizon = new Date(`${today}T00:00:00Z`)
+  horizon.setUTCDate(horizon.getUTCDate() + 30)
+  const deadlineLimit = parseNairobiDate(horizon.toISOString().slice(0, 10))
+  const data = await festivalsRepository.dashboardData(deadlineLimit)
+  const festivalById = new Map(data.festivals.map((festival) => [festival.id, festival]))
+  const activeFestivals = data.festivals.filter((festival) =>
+    festival.status !== 'COMPLETED'
+      && festival.status !== 'CANCELLED'
+      && (
+        !festival.startDate
+        || nairobiDateKey(festival.startDate) >= today
+        || Boolean(festival.endDate && nairobiDateKey(festival.endDate) >= today)
+      ),
+  )
+  const upcomingFestivals = activeFestivals.slice(0, 8)
+  const financeAmounts = new Map(data.financeEntries.map((entry) => [entry.id, entry.amount]))
+  const linkedAmounts = new Map<string, number[]>()
+  for (const link of data.financeLinks) {
+    const amount = financeAmounts.get(link.financeEntryId)
+    if (amount !== undefined) {
+      const amounts = linkedAmounts.get(link.budgetItemId) ?? []
+      amounts.push(amount)
+      linkedAmounts.set(link.budgetItemId, amounts)
+    }
+  }
+  const approvedAmounts = new Map<string, number>()
+  for (const approval of data.approvals) {
+    if (approval.type === 'BUDGET' && approval.status === 'APPROVED' && approval.budgetItemId && approval.approvedAmount !== null) {
+      approvedAmounts.set(approval.budgetItemId, approval.approvedAmount)
+    }
+  }
+  const entryCounts = new Map<string, Record<string, number>>()
+  for (const group of data.entryCounts) {
+    const counts = entryCounts.get(group.festivalId) ?? {}
+    counts[group.status] = group._count._all
+    entryCounts.set(group.festivalId, counts)
+  }
+  const logisticsCounts = new Map<string, number>()
+  for (const group of data.logisticsCounts) {
+    if (group.status === 'OPEN' || group.status === 'IN_PROGRESS') {
+      logisticsCounts.set(group.festivalId, (logisticsCounts.get(group.festivalId) ?? 0) + group._count._all)
+    }
+  }
+  const allDeadlines = [
+    ...data.entries.flatMap((entry) => entry.deadline ? [{
+      id: `entry:${entry.id}`,
+      festivalId: entry.festivalId,
+      title: entry.itemTitle,
+      kind: 'Entry submission',
+      dueAt: entry.deadline,
+    }] : []),
+    ...data.invitations.flatMap((invitation) => invitation.responseDeadline ? [{
+      id: `invitation:${invitation.id}`,
+      festivalId: invitation.festivalId,
+      title: 'Respond to festival invitation',
+      kind: 'Invitation response',
+      dueAt: invitation.responseDeadline,
+    }] : []),
+    ...data.logisticsItems.flatMap((item) => item.dueAt ? [{
+      id: `logistics:${item.id}`,
+      festivalId: item.festivalId,
+      title: item.title,
+      kind: 'Logistics',
+      dueAt: item.dueAt,
+    }] : []),
+  ].flatMap((item) => {
+    const festival = festivalById.get(item.festivalId)
+    return festival ? [{
+      ...item,
+      festivalName: festival.name,
+      overdue: nairobiDateKey(item.dueAt) < today,
+    }] : []
+  })
+  const overdueDeadlines = allDeadlines
+    .filter((item) => item.overdue)
+    .sort((left, right) => right.dueAt.getTime() - left.dueAt.getTime())
+  const upcomingDeadlines = allDeadlines
+    .filter((item) => !item.overdue)
+    .sort((left, right) => left.dueAt.getTime() - right.dueAt.getTime())
+  const priorityDeadlines = [...overdueDeadlines.slice(0, 6), ...upcomingDeadlines.slice(0, 6)]
+  const priorityIds = new Set(priorityDeadlines.map((item) => item.id))
+  const deadlines = [
+    ...priorityDeadlines,
+    ...allDeadlines
+      .filter((item) => !priorityIds.has(item.id))
+      .sort((left, right) => left.dueAt.getTime() - right.dueAt.getTime()),
+  ].slice(0, 12)
+
+  const summaries = upcomingFestivals.map((festival) => {
+    const festivalApprovals = data.approvals.filter((approval) => approval.festivalId === festival.id)
+    const festivalBudget = data.budgetItems.filter((item) => item.festivalId === festival.id)
+    const pendingBudgetApprovals = festivalApprovals.filter((approval) =>
+      approval.type === 'BUDGET' && approval.status === 'PENDING',
+    ).length
+    const pendingPlanApproval = festivalApprovals.some((approval) =>
+      approval.type === 'PLAN' && approval.status === 'PENDING',
+    )
+    const entryStatusCounts = entryCounts.get(festival.id) ?? {}
+    const budgetSummary = summarizeFestivalBudget(festivalBudget.map((item) => ({
+      type: item.type,
+      plannedAmount: item.plannedAmount,
+      approvedAmount: approvedAmounts.get(item.id) ?? null,
+      actualAmount: sumLinkedFinanceAmounts(linkedAmounts.get(item.id) ?? []),
+    })))
+    return {
+      ...festival,
+      entryStatusCounts,
+      budgetSummary,
+      pendingPlanApproval,
+      pendingBudgetApprovals,
+      incompleteLogistics: logisticsCounts.get(festival.id) ?? 0,
+    }
+  })
+  const pendingApprovals = data.approvals.filter((approval) => approval.status === 'PENDING').length
+  const incompleteLogistics = activeFestivals.reduce(
+    (total, festival) => total + (logisticsCounts.get(festival.id) ?? 0),
+    0,
+  )
+
+  return {
+    upcomingFestivals,
+    upcomingFestivalCount: activeFestivals.length,
+    deadlines,
+    summaries,
+    pendingApprovals,
+    incompleteLogistics,
+  }
 }
 
 export async function getFestival(festivalId: string) {

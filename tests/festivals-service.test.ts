@@ -3,6 +3,7 @@ import { parseNairobiDate } from '../src/lib/dates'
 
 const mocks = vi.hoisted(() => ({
   transaction: vi.fn(),
+  dashboardData: vi.fn(),
   findForUpdate: vi.fn(),
   update: vi.fn(),
   findFestivalForApproval: vi.fn(),
@@ -46,6 +47,7 @@ vi.mock('server-only', () => ({}))
 vi.mock('../src/modules/festivals/repository', () => ({
   festivalsRepository: {
     transaction: mocks.transaction,
+    dashboardData: mocks.dashboardData,
     findForUpdate: mocks.findForUpdate,
     update: mocks.update,
     findFestivalForApproval: mocks.findFestivalForApproval,
@@ -97,6 +99,7 @@ import {
   submitFestivalPlanApproval,
   submitFestivalBudgetApproval,
   decideFestivalApproval,
+  getFestivalDashboard,
   FestivalServiceError,
   linkFestivalFinanceEntry,
   unlinkFestivalFinanceEntry,
@@ -108,6 +111,18 @@ describe('festival entries and invitations service', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.transaction.mockImplementation(async (work) => work({}))
+    mocks.dashboardData.mockResolvedValue({
+      festivals: [],
+      entries: [],
+      entryCounts: [],
+      invitations: [],
+      logisticsItems: [],
+      logisticsCounts: [],
+      budgetItems: [],
+      financeLinks: [],
+      financeEntries: [],
+      approvals: [],
+    })
     mocks.festivalExists.mockResolvedValue({ id: 'festival-id' })
     mocks.isCurrentActiveMember.mockResolvedValue({ memberId: 'member-id' })
     mocks.categoryForFestival.mockResolvedValue({
@@ -249,6 +264,70 @@ describe('festival entries and invitations service', () => {
       createdById: 'committee-user',
     }))
     expect(mocks.createEntry).not.toHaveBeenCalled()
+  })
+
+  it('builds a dashboard with open deadlines, entry status, budget actuals, approvals, and logistics', async () => {
+    mocks.dashboardData.mockResolvedValue({
+      festivals: [{
+        id: 'festival-id',
+        name: 'University Drama Festival',
+        year: 2027,
+        status: 'PLANNING',
+        startDate: parseNairobiDate('2027-04-10'),
+        endDate: parseNairobiDate('2027-04-12'),
+      }],
+      entries: [{
+        id: 'entry-id',
+        festivalId: 'festival-id',
+        itemTitle: 'The River',
+        status: 'PREPARING',
+        deadline: parseNairobiDate('2027-03-09'),
+      }],
+      entryCounts: [{ festivalId: 'festival-id', status: 'PREPARING', _count: { _all: 2 } }],
+      invitations: [{
+        id: 'invitation-id',
+        festivalId: 'festival-id',
+        responseDeadline: parseNairobiDate('2027-03-11'),
+      }],
+      logisticsItems: [{
+        id: 'logistics-id',
+        festivalId: 'festival-id',
+        title: 'Confirm bus',
+        status: 'OPEN',
+        dueAt: parseNairobiDate('2027-03-08'),
+      }],
+      logisticsCounts: [
+        { festivalId: 'festival-id', status: 'OPEN', _count: { _all: 2 } },
+        { festivalId: 'festival-id', status: 'COMPLETED', _count: { _all: 1 } },
+      ],
+      budgetItems: [{ id: 'budget-id', festivalId: 'festival-id', type: 'EXPENSE', plannedAmount: 100000 }],
+      financeLinks: [{ budgetItemId: 'budget-id', financeEntryId: 'finance-id' }],
+      financeEntries: [{ id: 'finance-id', amount: 25000 }],
+      approvals: [
+        { festivalId: 'festival-id', type: 'PLAN', status: 'PENDING', budgetItemId: null, targetKey: 'PLAN:festival-id', approvedAmount: null },
+        { festivalId: 'festival-id', type: 'BUDGET', status: 'APPROVED', budgetItemId: 'budget-id', targetKey: 'BUDGET:budget-id', approvedAmount: 70000 },
+        { festivalId: 'festival-id', type: 'BUDGET', status: 'PENDING', budgetItemId: 'other-budget-id', targetKey: 'BUDGET:other-budget-id', approvedAmount: null },
+      ],
+    })
+
+    const dashboard = await getFestivalDashboard('2027-03-10')
+    expect(mocks.dashboardData).toHaveBeenCalledWith(parseNairobiDate('2027-04-09'))
+    expect(dashboard.pendingApprovals).toBe(2)
+    expect(dashboard.incompleteLogistics).toBe(2)
+    expect(dashboard.deadlines).toEqual([
+      expect.objectContaining({ kind: 'Entry submission', overdue: true }),
+      expect.objectContaining({ kind: 'Logistics', overdue: true }),
+      expect.objectContaining({ kind: 'Invitation response', overdue: false }),
+    ])
+    expect(dashboard.summaries[0]).toMatchObject({
+      pendingPlanApproval: true,
+      pendingBudgetApprovals: 1,
+      incompleteLogistics: 2,
+      entryStatusCounts: { PREPARING: 2 },
+      budgetSummary: {
+        EXPENSE: { planned: 100000, approved: 70000, actual: 25000 },
+      },
+    })
   })
 
   it('creates an assigned festival logistics item and audits only coordination metadata', async () => {

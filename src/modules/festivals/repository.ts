@@ -14,6 +14,122 @@ export const festivalsRepository = {
     take: 100,
   }),
 
+  dashboardData: async (deadlineLimit: Date) => {
+    const festivals = await prisma.festival.findMany({
+      orderBy: [{ startDate: 'asc' }, { year: 'desc' }, { name: 'asc' }],
+      take: 100,
+      select: {
+        id: true, name: true, year: true, status: true, startDate: true, endDate: true,
+      },
+    })
+    const festivalIds = festivals
+      .filter((festival) => festival.status !== 'COMPLETED' && festival.status !== 'CANCELLED')
+      .map((festival) => festival.id)
+    if (!festivalIds.length) {
+      return {
+        festivals,
+        entries: [],
+        entryCounts: [],
+        invitations: [],
+        logisticsItems: [],
+        logisticsCounts: [],
+        budgetItems: [],
+        financeLinks: [],
+        financeEntries: [],
+        approvals: [],
+      }
+    }
+
+    const [
+      entries,
+      entryCounts,
+      invitations,
+      logisticsItems,
+      logisticsCounts,
+      budgetItems,
+      financeLinks,
+      approvals,
+    ] = await Promise.all([
+      prisma.festivalEntry.findMany({
+        where: {
+          festivalId: { in: festivalIds },
+          status: { in: ['PENDING', 'PREPARING'] },
+          deadline: { lte: deadlineLimit },
+        },
+        orderBy: [{ deadline: 'asc' }, { id: 'asc' }],
+        take: 300,
+        select: { id: true, festivalId: true, itemTitle: true, status: true, deadline: true },
+      }),
+      prisma.festivalEntry.groupBy({
+        by: ['festivalId', 'status'],
+        where: { festivalId: { in: festivalIds } },
+        _count: { _all: true },
+      }),
+      prisma.festivalInvitation.findMany({
+        where: {
+          festivalId: { in: festivalIds },
+          status: 'RECEIVED',
+          responseDeadline: { lte: deadlineLimit },
+        },
+        orderBy: [{ responseDeadline: 'asc' }, { id: 'asc' }],
+        take: 300,
+        select: { id: true, festivalId: true, responseDeadline: true },
+      }),
+      prisma.festivalLogisticsItem.findMany({
+        where: {
+          festivalId: { in: festivalIds },
+          status: { in: ['OPEN', 'IN_PROGRESS'] },
+          dueAt: { lte: deadlineLimit },
+        },
+        orderBy: [{ dueAt: 'asc' }, { id: 'asc' }],
+        take: 300,
+        select: { id: true, festivalId: true, title: true, status: true, dueAt: true },
+      }),
+      prisma.festivalLogisticsItem.groupBy({
+        by: ['festivalId', 'status'],
+        where: { festivalId: { in: festivalIds } },
+        _count: { _all: true },
+      }),
+      prisma.festivalBudgetItem.findMany({
+        where: { festivalId: { in: festivalIds } },
+        take: 10000,
+        select: { id: true, festivalId: true, type: true, plannedAmount: true },
+      }),
+      prisma.festivalFinanceLink.findMany({
+        where: { festivalId: { in: festivalIds } },
+        select: { budgetItemId: true, financeEntryId: true },
+      }),
+      prisma.festivalApproval.findMany({
+        where: { festivalId: { in: festivalIds } },
+        take: 20000,
+        select: {
+          festivalId: true, budgetItemId: true, targetKey: true, type: true,
+          status: true, approvedAmount: true,
+        },
+      }),
+    ])
+    const financeEntryIds = [...new Set(financeLinks.map((link) => link.financeEntryId))]
+    const financeEntries = financeEntryIds.length
+      ? await prisma.financeEntry.findMany({
+        where: { id: { in: financeEntryIds } },
+        select: { id: true, amount: true },
+      })
+      : []
+
+    return {
+      festivals,
+      entries,
+      entryCounts,
+      invitations,
+      logisticsItems,
+      logisticsCounts,
+      budgetItems,
+      financeLinks,
+      financeEntries,
+      approvals,
+    }
+  },
+
   find: (festivalId: string) => prisma.festival.findUnique({ where: { id: festivalId } }),
 
   findForUpdate: (tx: Transaction, festivalId: string) =>
