@@ -12,6 +12,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
       <Link className="btn-secondary" href="/admin/meetings" prefetch={false}>Meetings</Link>
       <Link className="btn-secondary" href="/admin/elections" prefetch={false}>Elections</Link>
       <Link className="btn-secondary" href="/admin/productions" prefetch={false}>Productions</Link>
+      <Link className="btn-secondary" href="/admin/festivals" prefetch={false}>Festivals</Link>
       <Link className="btn-secondary" href="/admin/finance" prefetch={false}>Finance</Link>
       <Link className="btn-secondary" href="/admin/analytics" prefetch={false}>Attendance</Link>
       <Link className="btn-secondary" href="/admin/absences" prefetch={false}>Absences</Link>

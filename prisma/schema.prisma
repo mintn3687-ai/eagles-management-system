@@ -143,6 +143,55 @@ enum ProductionStatus {
   CANCELLED
 }
 
+enum FestivalStatus {
+  DRAFT
+  PLANNING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum FestivalInvitationStatus {
+  RECEIVED
+  ACCEPTED
+  DECLINED
+}
+
+enum FestivalEntryStatus {
+  PENDING
+  PREPARING
+  SUBMITTED
+  CONFIRMED
+  REJECTED
+}
+
+enum FestivalBudgetType {
+  INCOME
+  EXPENSE
+}
+
+enum FestivalApprovalType {
+  PLAN
+  BUDGET
+}
+
+enum FestivalApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum FestivalLogisticsStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum FestivalDocumentStatus {
+  PENDING_UPLOAD
+  READY
+}
+
 enum ProductionTaskStatus {
   OPEN
   IN_PROGRESS
@@ -1144,6 +1193,167 @@ model ReconciliationEntry {
 
   @@unique([batchId, statementReference])
   @@index([batchId, paymentId])
+}
+
+model Festival {
+  id          String         @id @default(cuid())
+  name        String
+  year        Int
+  organizer   String?
+  venue       String?
+  startDate   DateTime?      @db.Timestamp(3)
+  endDate     DateTime?      @db.Timestamp(3)
+  status      FestivalStatus @default(PLANNING)
+  notes       String?
+  createdById String
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([year, status, startDate])
+  @@index([name, year])
+  @@index([createdById])
+}
+
+model FestivalInvitation {
+  id               String                   @id @default(cuid())
+  festivalId       String
+  receivedAt       DateTime                 @db.Timestamp(3)
+  responseDeadline DateTime?                @db.Timestamp(3)
+  status           FestivalInvitationStatus @default(RECEIVED)
+  respondedAt      DateTime?                @db.Timestamp(3)
+  notes            String?
+  recordedById     String
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+
+  @@index([festivalId, status, receivedAt])
+  @@index([responseDeadline, status])
+  @@index([recordedById])
+}
+
+model FestivalEntryCategory {
+  id              String    @id @default(cuid())
+  festivalId      String
+  name            String
+  defaultDeadline DateTime? @db.Timestamp(3)
+  createdById     String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([festivalId, name])
+  @@index([festivalId, defaultDeadline])
+  @@index([createdById])
+}
+
+model FestivalEntry {
+  id           String              @id @default(cuid())
+  festivalId   String
+  categoryId   String
+  productionId String?
+  itemTitle    String
+  status       FestivalEntryStatus @default(PENDING)
+  deadline     DateTime?           @db.Timestamp(3)
+  submittedAt  DateTime?           @db.Timestamp(3)
+  confirmedAt  DateTime?           @db.Timestamp(3)
+  notes        String?
+  createdById  String
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@index([festivalId, status, deadline])
+  @@index([categoryId])
+  @@index([productionId])
+  @@index([createdById])
+}
+
+model FestivalBudgetItem {
+  id            String             @id @default(cuid())
+  festivalId    String
+  type          FestivalBudgetType
+  category      String
+  plannedAmount Int
+  notes         String?
+  createdById   String
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@index([festivalId, type, category])
+  @@index([createdById])
+}
+
+model FestivalFinanceLink {
+  id             String   @id @default(cuid())
+  festivalId     String
+  budgetItemId   String
+  financeEntryId String   @unique
+  linkedById     String
+  linkedAt       DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([festivalId, budgetItemId])
+  @@index([linkedById])
+}
+
+model FestivalApproval {
+  id              String                 @id @default(cuid())
+  festivalId      String
+  budgetItemId    String?
+  targetKey       String                 @unique
+  type            FestivalApprovalType
+  status          FestivalApprovalStatus @default(PENDING)
+  requestedAmount Int?
+  approvedAmount  Int?
+  submittedById   String
+  submittedAt     DateTime               @default(now())
+  decidedById     String?
+  decidedAt       DateTime?
+  decisionReason  String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  @@index([festivalId, type, status])
+  @@index([budgetItemId, status])
+  @@index([submittedById])
+  @@index([decidedById])
+}
+
+model FestivalLogisticsItem {
+  id               String                  @id @default(cuid())
+  festivalId       String
+  category         String
+  title            String
+  description      String?
+  dueAt            DateTime?               @db.Timestamp(3)
+  assignedMemberId String?
+  status           FestivalLogisticsStatus @default(OPEN)
+  completedAt      DateTime?               @db.Timestamp(3)
+  completedById    String?
+  createdById      String
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+
+  @@index([festivalId, status, dueAt, id])
+  @@index([assignedMemberId, festivalId])
+}
+
+model FestivalDocument {
+  id              String                 @id @default(cuid())
+  festivalId      String
+  originalName    String
+  contentType     String
+  sizeBytes       Int
+  storageKey      String                 @unique
+  uploadedById    String
+  status          FestivalDocumentStatus @default(PENDING_UPLOAD)
+  uploadExpiresAt DateTime               @db.Timestamp(3)
+  uploadedAt      DateTime?              @db.Timestamp(3)
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  @@index([festivalId, status, createdAt])
+  @@index([uploadedById])
+  @@index([status, uploadExpiresAt])
 }
 
 model PushSubscription {

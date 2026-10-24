@@ -38,6 +38,8 @@ const routes = [
   ['/admin/meetings', 'COMMITTEE', 'src/app/admin/meetings/page.tsx', 'pagePermission'],
   ['/admin/meetings/[id]', 'COMMITTEE', 'src/app/admin/meetings/[id]/page.tsx', 'pagePermission'],
   ['/member/meetings', 'MEMBER', 'src/app/member/meetings/page.tsx', 'pagePermission'],
+  ['/admin/festivals', 'COMMITTEE', 'src/app/admin/festivals/page.tsx', 'pagePermission'],
+  ['/admin/festivals/[festivalId]', 'COMMITTEE', 'src/app/admin/festivals/[festivalId]/page.tsx', 'pagePermission'],
   ['GET /admin/export', 'SUPER_ADMIN', 'src/app/admin/export/route.ts', 'requireRole'],
   ['GET /admin/analytics/export', 'COMMITTEE', 'src/app/admin/analytics/export/route.ts', 'requireRole'],
   ['GET /admin/members/export', 'COMMITTEE', 'src/app/admin/members/export/route.ts', 'requireRole'],
@@ -53,6 +55,8 @@ const pagePermissions: Record<string, string> = {
   '/admin/meetings': 'meetings:manage',
   '/admin/meetings/[id]': 'meetings:manage',
   '/member/meetings': 'meetings:read',
+  '/admin/festivals': 'festivals:manage',
+  '/admin/festivals/[festivalId]': 'festivals:manage',
 }
 
 describe('admin role access', () => {
@@ -71,6 +75,14 @@ describe('admin role access', () => {
       ? `pagePermission('${permission}')`
       : `${guard}('${required}')`
     expect(sourceText).toContain(declaration)
+  })
+
+  it.each([
+    'src/app/admin/festivals/page.tsx',
+    'src/app/admin/festivals/[festivalId]/page.tsx',
+  ])('keeps festival financial data behind finance permission in %s', (source) => {
+    const sourceText = readFileSync(resolve(process.cwd(), source), 'utf8')
+    expect(sourceText).toContain("pagePermission('finance:manage')")
   })
 
   it.each(routes.flatMap(([route, required]) => roles.map((role) => ({ route, required, role }))))(
