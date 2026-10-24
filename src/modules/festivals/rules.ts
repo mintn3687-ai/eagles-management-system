@@ -1,6 +1,21 @@
 export type FestivalEntryStatus = 'PENDING' | 'PREPARING' | 'SUBMITTED' | 'CONFIRMED' | 'REJECTED'
 export type FestivalInvitationStatus = 'RECEIVED' | 'ACCEPTED' | 'DECLINED'
 export type FestivalBudgetType = 'INCOME' | 'EXPENSE'
+export type FestivalLogisticsStatus = 'OPEN' | 'IN_PROGRESS' | 'COMPLETED'
+
+export const festivalLogisticsCategories = [
+  'TRANSPORT',
+  'ACCOMMODATION',
+  'MEALS',
+  'SCHEDULE',
+  'VENUE',
+  'CONTACTS',
+  'EQUIPMENT',
+  'COSTUMES',
+  'PROPS',
+  'PARTICIPANTS',
+  'OTHER',
+] as const
 
 export class FestivalApprovalRuleError extends Error {}
 
@@ -22,6 +37,10 @@ export function isEntryOverdue(status: FestivalEntryStatus, deadline: string | n
 
 export function isInvitationOverdue(status: FestivalInvitationStatus, deadline: string | null, today: string) {
   return Boolean(deadline && deadline < today && status === 'RECEIVED')
+}
+
+export function isFestivalLogisticsOverdue(status: FestivalLogisticsStatus, dueAt: string | null, today: string) {
+  return Boolean(dueAt && dueAt < today && status !== 'COMPLETED')
 }
 
 export function sumLinkedFinanceAmounts(amounts: number[]) {

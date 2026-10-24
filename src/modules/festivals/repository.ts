@@ -88,6 +88,44 @@ export const festivalsRepository = {
       data,
     }),
 
+  isCurrentActiveMember: (tx: Transaction, memberId: string) => tx.seasonMembership.findFirst({
+    where: { memberId, status: 'ACTIVE', season: { isCurrent: true } },
+    select: { memberId: true },
+  }),
+
+  createLogisticsItem: (tx: Transaction, input: Prisma.FestivalLogisticsItemUncheckedCreateInput) =>
+    tx.festivalLogisticsItem.create({ data: input }),
+
+  findLogisticsItem: (tx: Transaction, festivalId: string, logisticsItemId: string) =>
+    tx.festivalLogisticsItem.findFirst({
+      where: { id: logisticsItemId, festivalId },
+      select: {
+        id: true, category: true, title: true, description: true, dueAt: true,
+        assignedMemberId: true, status: true,
+      },
+    }),
+
+  updateLogisticsItem: (
+    tx: Transaction,
+    festivalId: string,
+    logisticsItemId: string,
+    data: Prisma.FestivalLogisticsItemUpdateManyMutationInput,
+  ) => tx.festivalLogisticsItem.updateMany({
+    where: { id: logisticsItemId, festivalId },
+    data,
+  }),
+
+  transitionLogisticsItem: (
+    tx: Transaction,
+    festivalId: string,
+    logisticsItemId: string,
+    from: 'OPEN' | 'IN_PROGRESS' | 'COMPLETED',
+    data: Prisma.FestivalLogisticsItemUpdateManyMutationInput,
+  ) => tx.festivalLogisticsItem.updateMany({
+    where: { id: logisticsItemId, festivalId, status: from },
+    data,
+  }),
+
   createBudgetItem: (tx: Transaction, input: Prisma.FestivalBudgetItemUncheckedCreateInput) =>
     tx.festivalBudgetItem.create({ data: input }),
 
@@ -170,7 +208,7 @@ export const festivalsRepository = {
     tx.festivalFinanceLink.deleteMany({ where: { id: linkId, festivalId } }),
 
   planningData: async (festivalId: string) => {
-    const [categories, invitations, entries, budgetItems, financeLinks, approvals] = await Promise.all([
+    const [categories, invitations, entries, budgetItems, financeLinks, approvals, logisticsItems, activeMembers] = await Promise.all([
       prisma.festivalEntryCategory.findMany({
         where: { festivalId },
         orderBy: [{ name: 'asc' }, { id: 'asc' }],
@@ -200,14 +238,31 @@ export const festivalsRepository = {
         orderBy: [{ submittedAt: 'desc' }, { id: 'desc' }],
         take: 200,
       }),
+      prisma.festivalLogisticsItem.findMany({
+        where: { festivalId },
+        orderBy: [{ dueAt: 'asc' }, { createdAt: 'desc' }, { id: 'desc' }],
+        take: 200,
+      }),
+      prisma.seasonMembership.findMany({
+        where: { status: 'ACTIVE', season: { isCurrent: true } },
+        orderBy: [{ member: { fullName: 'asc' } }, { memberId: 'asc' }],
+        take: 300,
+        select: { memberId: true, member: { select: { fullName: true } } },
+      }),
     ])
     const productionIds = [...new Set(entries.flatMap((entry) => entry.productionId ? [entry.productionId] : []))]
     const approvalUserIds = [...new Set(approvals.flatMap((approval) => [
       approval.submittedById,
       ...(approval.decidedById ? [approval.decidedById] : []),
     ]))]
+    const logisticsActorIds = [...new Set(logisticsItems.flatMap((item) =>
+      item.completedById ? [item.completedById] : [],
+    ))]
+    const logisticsMemberIds = [...new Set(logisticsItems.flatMap((item) =>
+      item.assignedMemberId ? [item.assignedMemberId] : [],
+    ))]
     const linkedFinanceEntryIds = [...new Set(financeLinks.map((link) => link.financeEntryId))]
-    const [productions, linkedFinanceEntries, recentFinanceEntries, approvalUsers] = await Promise.all([
+    const [productions, linkedFinanceEntries, recentFinanceEntries, approvalUsers, logisticsActors, logisticsMembers] = await Promise.all([
       productionIds.length
         ? prisma.production.findMany({
         where: { id: { in: productionIds } },
@@ -231,6 +286,18 @@ export const festivalsRepository = {
           select: { id: true, name: true },
         })
         : Promise.resolve([]),
+      logisticsActorIds.length
+        ? prisma.user.findMany({
+          where: { id: { in: logisticsActorIds } },
+          select: { id: true, name: true },
+        })
+        : Promise.resolve([]),
+      logisticsMemberIds.length
+        ? prisma.member.findMany({
+          where: { id: { in: logisticsMemberIds } },
+          select: { id: true, fullName: true },
+        })
+        : Promise.resolve([]),
     ])
     const recentLinks = recentFinanceEntries.length
       ? await prisma.festivalFinanceLink.findMany({
@@ -244,6 +311,8 @@ export const festivalsRepository = {
     const productionNames = new Map(productions.map((production) => [production.id, production.title]))
     const financeEntries = new Map(linkedFinanceEntries.map((entry) => [entry.id, entry]))
     const approvalNames = new Map(approvalUsers.map((user) => [user.id, user.name]))
+    const logisticsActorNames = new Map(logisticsActors.map((user) => [user.id, user.name]))
+    const logisticsMemberNames = new Map(logisticsMembers.map((member) => [member.id, member.fullName]))
     const approvalByTarget = new Map(approvals.map((approval) => [approval.targetKey, {
       ...approval,
       submittedByName: approvalNames.get(approval.submittedById) ?? 'Unknown user',
@@ -281,6 +350,19 @@ export const festivalsRepository = {
             ...link,
             financeEntry: financeEntries.get(link.financeEntryId) ?? null,
           })),
+      })),
+      logisticsItems: logisticsItems.map((item) => ({
+        ...item,
+        assignedMemberName: item.assignedMemberId
+          ? logisticsMemberNames.get(item.assignedMemberId) ?? 'Former member'
+          : null,
+        completedByName: item.completedById
+          ? logisticsActorNames.get(item.completedById) ?? 'Unknown user'
+          : null,
+      })),
+      logisticsAssigneeOptions: activeMembers.map(({ memberId, member }) => ({
+        id: memberId,
+        fullName: member.fullName,
       })),
       unlinkedFinanceEntries,
       productionOptions,

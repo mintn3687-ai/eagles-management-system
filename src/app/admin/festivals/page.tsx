@@ -19,7 +19,7 @@ export default async function FestivalsPage() {
     <header className="space-y-2">
       <p className="text-sm font-semibold uppercase tracking-widest text-emerald-700">Festival planning</p>
       <h1>Kenya National Drama Festivals</h1>
-      <p className="text-slate-600">Track festival plans here. Entries, budgets, approvals, and logistics will be added in subsequent phases.</p>
+      <p className="text-slate-600">Track festival invitations, entries, deadlines, budgets, approvals, and logistics from each festival plan.</p>
     </header>
 
     <FestivalCreateForm today={today} />

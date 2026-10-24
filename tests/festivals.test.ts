@@ -8,6 +8,8 @@ import {
   festivalCreateSchema,
   festivalFinanceLinkSchema,
   festivalEntryCreateSchema,
+  festivalLogisticsItemSchema,
+  festivalLogisticsStatusSchema,
   festivalUpdateSchema,
   invitationCreateSchema,
 } from '../src/modules/festivals/schema'
@@ -15,6 +17,7 @@ import {
   canTransitionEntry,
   isEntryOverdue,
   isInvitationOverdue,
+  isFestivalLogisticsOverdue,
   summarizeFestivalBudget,
   validateBudgetApprovalAmount,
 } from '../src/modules/festivals/rules'
@@ -144,6 +147,34 @@ describe('festival planning foundation', () => {
     expect(hasPermission('MEMBER', 'festivals:approve')).toBe(false)
     expect(hasPermission('COMMITTEE', 'festivals:approve')).toBe(true)
     expect(hasPermission('SUPER_ADMIN', 'festivals:approve')).toBe(true)
+  })
+
+  it('validates logistics details and identifies overdue incomplete tasks', () => {
+    expect(festivalLogisticsItemSchema.safeParse({
+      festivalId: 'festival-id',
+      category: 'PARTICIPANTS',
+      title: 'Confirm participant list',
+      description: '',
+      dueAt: '2027-03-10',
+      assignedMemberId: 'member-id',
+    }).success).toBe(true)
+    expect(festivalLogisticsItemSchema.safeParse({
+      festivalId: 'festival-id',
+      category: 'UNSUPPORTED',
+      title: 'Confirm participant list',
+      description: '',
+      dueAt: '2027-02-30',
+      assignedMemberId: '',
+    }).success).toBe(false)
+    expect(festivalLogisticsStatusSchema.safeParse({
+      festivalId: 'festival-id',
+      logisticsItemId: 'logistics-item-id',
+      status: 'COMPLETED',
+    }).success).toBe(true)
+    expect(isFestivalLogisticsOverdue('OPEN', '2027-03-09', '2027-03-10')).toBe(true)
+    expect(isFestivalLogisticsOverdue('IN_PROGRESS', '2027-03-09', '2027-03-10')).toBe(true)
+    expect(isFestivalLogisticsOverdue('COMPLETED', '2027-03-09', '2027-03-10')).toBe(false)
+    expect(isFestivalLogisticsOverdue('OPEN', '2027-03-10', '2027-03-10')).toBe(false)
   })
 
   it('restricts festival planning to committee and super admins', () => {

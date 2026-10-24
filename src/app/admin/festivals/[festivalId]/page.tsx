@@ -13,11 +13,13 @@ import {
   FestivalFinanceUnlinkForm,
   FestivalInvitationForm,
   FestivalInvitationStatusForm,
+  FestivalLogisticsItemForm,
+  FestivalLogisticsStatusForm,
   FestivalPlanApprovalRequestForm,
   FestivalUpdateForm,
 } from '@/components/festivals/festival-forms'
 import { getFestival, getFestivalPlanning } from '@/modules/festivals/service'
-import { isEntryOverdue, isInvitationOverdue } from '@/modules/festivals/rules'
+import { isEntryOverdue, isFestivalLogisticsOverdue, isInvitationOverdue } from '@/modules/festivals/rules'
 
 export default async function FestivalDetailPage({ params }: {
   params: Promise<{ festivalId: string }>
@@ -196,6 +198,42 @@ export default async function FestivalDetailPage({ params }: {
           </li>)}
         </ul> : <p className="text-slate-600">No festival budget items recorded yet.</p>}
         <p className="text-sm text-slate-600">A reduced approved budget amount requires a reason. Editing an approved budget item automatically returns it to Pending.</p>
+      </div>
+    </section>
+
+    <section className="space-y-4">
+      <header>
+        <h2>Festival travel and logistics</h2>
+        <p className="text-slate-600">Coordinate transport, accommodation, meals, schedules, venue, contacts, equipment, costumes, props, and participants. Assign one responsible member and track due dates and completion.</p>
+      </header>
+      <FestivalLogisticsItemForm festivalId={festivalId} members={planning.logisticsAssigneeOptions} />
+      <div className="card space-y-3">
+        <h3>Logistics checklist</h3>
+        {planning.logisticsItems.length ? <ul className="divide-y divide-slate-100">
+          {planning.logisticsItems.map((item) => {
+            const dueDate = item.dueAt ? nairobiDateKey(item.dueAt) : null
+            const overdue = isFestivalLogisticsOverdue(item.status, dueDate, today)
+            return <li className="space-y-2 py-3" key={item.id}>
+              <p className="font-medium">{item.category.replaceAll('_', ' ').toLowerCase()} · {item.title}</p>
+              <p className="text-sm text-slate-600">
+                Status: {item.status.replaceAll('_', ' ').toLowerCase()} · Due: {item.dueAt ? formatNairobiDate(item.dueAt) : 'Not set'}
+                {overdue && <span className="ml-2 font-semibold text-red-700">Overdue</span>}
+              </p>
+              {item.assignedMemberName && <p className="text-sm text-slate-600">Responsible member: {item.assignedMemberName}</p>}
+              {item.description && <p className="text-sm text-slate-600">{item.description}</p>}
+              {item.completedAt && <p className="text-sm text-slate-600">
+                Completed {formatNairobiDate(item.completedAt, true)}{item.completedByName ? ` by ${item.completedByName}` : ''}
+              </p>}
+              <FestivalLogisticsStatusForm festivalId={festivalId} logisticsItemId={item.id} status={item.status} />
+              <details>
+                <summary className="cursor-pointer text-sm text-emerald-800">Edit logistics item</summary>
+                <div className="mt-2">
+                  <FestivalLogisticsItemForm festivalId={festivalId} members={planning.logisticsAssigneeOptions} item={item} />
+                </div>
+              </details>
+            </li>
+          })}
+        </ul> : <p className="text-slate-600">No festival logistics items yet. Add tasks for travel, schedules, equipment, or participant coordination.</p>}
       </div>
     </section>
   </div>

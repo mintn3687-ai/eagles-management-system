@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { festivalLogisticsCategories } from './rules'
 
 const dateKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
   const date = new Date(`${value}T00:00:00Z`)
@@ -110,6 +111,31 @@ export const festivalApprovalDecisionSchema = z.object({
   reason: z.string().trim().max(1000).default(''),
 }).strict()
 
+const festivalLogisticsItemFields = {
+  category: z.enum(festivalLogisticsCategories),
+  title: z.string().trim().min(2, 'Enter a logistics item title.').max(160),
+  description: z.string().trim().max(2000).default(''),
+  dueAt: optionalDate,
+  assignedMemberId: z.union([z.string().trim().min(1).max(191), z.literal('')]).default(''),
+}
+
+export const festivalLogisticsItemSchema = z.object({
+  festivalId: z.string().trim().min(1).max(191),
+  ...festivalLogisticsItemFields,
+}).strict()
+
+export const festivalLogisticsItemUpdateSchema = z.object({
+  festivalId: z.string().trim().min(1).max(191),
+  logisticsItemId: z.string().trim().min(1).max(191),
+  ...festivalLogisticsItemFields,
+}).strict()
+
+export const festivalLogisticsStatusSchema = z.object({
+  festivalId: z.string().trim().min(1).max(191),
+  logisticsItemId: z.string().trim().min(1).max(191),
+  status: z.enum(['OPEN', 'IN_PROGRESS', 'COMPLETED']),
+}).strict()
+
 export const festivalFinanceUnlinkSchema = z.object({
   festivalId: z.string().trim().min(1).max(191),
   linkId: z.string().trim().min(1).max(191),
@@ -128,3 +154,6 @@ export type FestivalFinanceUnlinkInput = z.infer<typeof festivalFinanceUnlinkSch
 export type FestivalPlanApprovalSubmitInput = z.infer<typeof festivalPlanApprovalSubmitSchema>
 export type FestivalBudgetApprovalSubmitInput = z.infer<typeof festivalBudgetApprovalSubmitSchema>
 export type FestivalApprovalDecisionInput = z.infer<typeof festivalApprovalDecisionSchema>
+export type FestivalLogisticsItemInput = z.infer<typeof festivalLogisticsItemSchema>
+export type FestivalLogisticsItemUpdateInput = z.infer<typeof festivalLogisticsItemUpdateSchema>
+export type FestivalLogisticsStatusInput = z.infer<typeof festivalLogisticsStatusSchema>

@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   findFestivalForApproval: vi.fn(),
   festivalExists: vi.fn(),
   categoryForFestival: vi.fn(),
+  isCurrentActiveMember: vi.fn(),
   productionExists: vi.fn(),
   createInvitation: vi.fn(),
   findInvitation: vi.fn(),
@@ -18,6 +19,10 @@ const mocks = vi.hoisted(() => ({
   createEntry: vi.fn(),
   findEntry: vi.fn(),
   transitionEntry: vi.fn(),
+  createLogisticsItem: vi.fn(),
+  findLogisticsItem: vi.fn(),
+  updateLogisticsItem: vi.fn(),
+  transitionLogisticsItem: vi.fn(),
   createBudgetItem: vi.fn(),
   findBudgetItem: vi.fn(),
   updateBudgetItem: vi.fn(),
@@ -46,6 +51,7 @@ vi.mock('../src/modules/festivals/repository', () => ({
     findFestivalForApproval: mocks.findFestivalForApproval,
     festivalExists: mocks.festivalExists,
     categoryForFestival: mocks.categoryForFestival,
+    isCurrentActiveMember: mocks.isCurrentActiveMember,
     productionExists: mocks.productionExists,
     createInvitation: mocks.createInvitation,
     findInvitation: mocks.findInvitation,
@@ -56,6 +62,10 @@ vi.mock('../src/modules/festivals/repository', () => ({
     createEntry: mocks.createEntry,
     findEntry: mocks.findEntry,
     transitionEntry: mocks.transitionEntry,
+    createLogisticsItem: mocks.createLogisticsItem,
+    findLogisticsItem: mocks.findLogisticsItem,
+    updateLogisticsItem: mocks.updateLogisticsItem,
+    transitionLogisticsItem: mocks.transitionLogisticsItem,
     createBudgetItem: mocks.createBudgetItem,
     findBudgetItem: mocks.findBudgetItem,
     updateBudgetItem: mocks.updateBudgetItem,
@@ -79,6 +89,9 @@ vi.mock('@/lib/audit', () => ({ writeAuditLog: mocks.writeAuditLog }))
 import {
   createFestivalEntry,
   createFestivalBudgetItem,
+  createFestivalLogisticsItem,
+  updateFestivalLogisticsItem,
+  updateFestivalLogisticsStatus,
   updateFestival,
   updateFestivalBudgetItem,
   submitFestivalPlanApproval,
@@ -96,6 +109,7 @@ describe('festival entries and invitations service', () => {
     vi.clearAllMocks()
     mocks.transaction.mockImplementation(async (work) => work({}))
     mocks.festivalExists.mockResolvedValue({ id: 'festival-id' })
+    mocks.isCurrentActiveMember.mockResolvedValue({ memberId: 'member-id' })
     mocks.categoryForFestival.mockResolvedValue({
       id: 'category-id',
       defaultDeadline: parseNairobiDate('2027-03-01'),
@@ -104,6 +118,23 @@ describe('festival entries and invitations service', () => {
     mocks.createEntry.mockResolvedValue({ id: 'entry-id' })
     mocks.findEntry.mockResolvedValue({ id: 'entry-id', status: 'PENDING' })
     mocks.transitionEntry.mockResolvedValue({ count: 1 })
+    mocks.createLogisticsItem.mockResolvedValue({
+      id: 'logistics-item-id',
+      category: 'TRANSPORT',
+      assignedMemberId: 'member-id',
+      dueAt: parseNairobiDate('2027-03-10'),
+    })
+    mocks.findLogisticsItem.mockResolvedValue({
+      id: 'logistics-item-id',
+      category: 'TRANSPORT',
+      title: 'Confirm bus',
+      description: null,
+      dueAt: null,
+      assignedMemberId: null,
+      status: 'OPEN',
+    })
+    mocks.updateLogisticsItem.mockResolvedValue({ count: 1 })
+    mocks.transitionLogisticsItem.mockResolvedValue({ count: 1 })
     mocks.findInvitation.mockResolvedValue({ id: 'invitation-id', status: 'RECEIVED' })
     mocks.transitionInvitation.mockResolvedValue({ count: 1 })
     mocks.createBudgetItem.mockResolvedValue({ id: 'budget-item-id', category: 'Transport', plannedAmount: 50000 })
@@ -218,6 +249,134 @@ describe('festival entries and invitations service', () => {
       createdById: 'committee-user',
     }))
     expect(mocks.createEntry).not.toHaveBeenCalled()
+  })
+
+  it('creates an assigned festival logistics item and audits only coordination metadata', async () => {
+    await expect(createFestivalLogisticsItem({
+      festivalId: 'festival-id',
+      category: 'TRANSPORT',
+      title: 'Confirm bus departure',
+      description: 'Meet at the main gate.',
+      dueAt: '2027-03-10',
+      assignedMemberId: 'member-id',
+    }, 'committee-user')).resolves.toMatchObject({ id: 'logistics-item-id' })
+
+    expect(mocks.isCurrentActiveMember).toHaveBeenCalledWith({}, 'member-id')
+    expect(mocks.createLogisticsItem).toHaveBeenCalledWith({}, {
+      festivalId: 'festival-id',
+      category: 'TRANSPORT',
+      title: 'Confirm bus departure',
+      description: 'Meet at the main gate.',
+      dueAt: parseNairobiDate('2027-03-10'),
+      assignedMemberId: 'member-id',
+      createdById: 'committee-user',
+    })
+    expect(mocks.writeAuditLog).toHaveBeenCalledWith({}, expect.objectContaining({
+      action: 'FESTIVAL_LOGISTICS_ITEM_CREATED',
+      details: expect.objectContaining({ assignedMemberId: 'member-id' }),
+    }))
+  })
+
+  it('rejects missing festivals and inactive member assignments', async () => {
+    mocks.festivalExists.mockResolvedValue(null)
+    await expect(createFestivalLogisticsItem({
+      festivalId: 'missing-festival',
+      category: 'TRANSPORT',
+      title: 'Confirm bus',
+      description: '',
+      dueAt: null,
+      assignedMemberId: '',
+    }, 'committee-user')).rejects.toThrow(/Festival not found/)
+
+    mocks.festivalExists.mockResolvedValue({ id: 'festival-id' })
+    mocks.isCurrentActiveMember.mockResolvedValue(null)
+    await expect(createFestivalLogisticsItem({
+      festivalId: 'festival-id',
+      category: 'PARTICIPANTS',
+      title: 'Coordinate attendance',
+      description: '',
+      dueAt: null,
+      assignedMemberId: 'inactive-member',
+    }, 'committee-user')).rejects.toThrow(/active member/)
+    expect(mocks.createLogisticsItem).not.toHaveBeenCalled()
+  })
+
+  it('updates logistics assignments and item details within the festival scope', async () => {
+    await expect(updateFestivalLogisticsItem({
+      festivalId: 'festival-id',
+      logisticsItemId: 'logistics-item-id',
+      category: 'ACCOMMODATION',
+      title: 'Confirm rooms',
+      description: 'Reserve the agreed rooms.',
+      dueAt: '2027-03-11',
+      assignedMemberId: 'member-id',
+    }, 'committee-user')).resolves.toEqual({ updated: true })
+    expect(mocks.updateLogisticsItem).toHaveBeenCalledWith({}, 'festival-id', 'logistics-item-id', {
+      category: 'ACCOMMODATION',
+      title: 'Confirm rooms',
+      description: 'Reserve the agreed rooms.',
+      dueAt: parseNairobiDate('2027-03-11'),
+      assignedMemberId: 'member-id',
+    })
+
+    mocks.findLogisticsItem.mockResolvedValue(null)
+    await expect(updateFestivalLogisticsItem({
+      festivalId: 'festival-id',
+      logisticsItemId: 'foreign-item',
+      category: 'ACCOMMODATION',
+      title: 'Confirm rooms',
+      description: '',
+      dueAt: null,
+      assignedMemberId: '',
+    }, 'committee-user')).rejects.toThrow(/not found for this festival/)
+  })
+
+  it('records completion attribution and clears it when a logistics task is reopened', async () => {
+    await expect(updateFestivalLogisticsStatus({
+      festivalId: 'festival-id',
+      logisticsItemId: 'logistics-item-id',
+      status: 'COMPLETED',
+    }, 'committee-user')).resolves.toMatchObject({ status: 'COMPLETED', changed: true })
+    expect(mocks.transitionLogisticsItem).toHaveBeenCalledWith(
+      {},
+      'festival-id',
+      'logistics-item-id',
+      'OPEN',
+      {
+        status: 'COMPLETED',
+        completedAt: expect.any(Date),
+        completedById: 'committee-user',
+      },
+    )
+
+    mocks.findLogisticsItem.mockResolvedValue({
+      id: 'logistics-item-id',
+      category: 'TRANSPORT',
+      title: 'Confirm bus',
+      description: null,
+      dueAt: null,
+      assignedMemberId: null,
+      status: 'COMPLETED',
+    })
+    await updateFestivalLogisticsStatus({
+      festivalId: 'festival-id',
+      logisticsItemId: 'logistics-item-id',
+      status: 'IN_PROGRESS',
+    }, 'committee-user')
+    expect(mocks.transitionLogisticsItem).toHaveBeenLastCalledWith(
+      {},
+      'festival-id',
+      'logistics-item-id',
+      'COMPLETED',
+      { status: 'IN_PROGRESS', completedAt: null, completedById: null },
+    )
+
+    mocks.transitionLogisticsItem.mockResolvedValue({ count: 0 })
+    await expect(updateFestivalLogisticsStatus({
+      festivalId: 'festival-id',
+      logisticsItemId: 'logistics-item-id',
+      status: 'OPEN',
+    }, 'committee-user')).rejects.toThrow(/already changed status/)
   })
 
   it('links only matching-type, previously unlinked finance entries at their full ledger amount', async () => {

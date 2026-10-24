@@ -181,6 +181,12 @@ enum FestivalApprovalStatus {
   REJECTED
 }
 
+enum FestivalLogisticsStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+}
+
 enum ProductionTaskStatus {
   OPEN
   IN_PROGRESS
@@ -1305,6 +1311,25 @@ model FestivalApproval {
   @@index([budgetItemId, status])
   @@index([submittedById])
   @@index([decidedById])
+}
+
+model FestivalLogisticsItem {
+  id               String                  @id @default(cuid())
+  festivalId       String
+  category         String
+  title            String
+  description      String?
+  dueAt            DateTime?               @db.Timestamp(3)
+  assignedMemberId String?
+  status           FestivalLogisticsStatus @default(OPEN)
+  completedAt      DateTime?               @db.Timestamp(3)
+  completedById    String?
+  createdById      String
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+
+  @@index([festivalId, status, dueAt, id])
+  @@index([assignedMemberId, festivalId])
 }
 
 model PushSubscription {

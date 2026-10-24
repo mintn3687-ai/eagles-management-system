@@ -13,6 +13,9 @@ import {
   festivalEntryCreateSchema,
   festivalFinanceLinkSchema,
   festivalFinanceUnlinkSchema,
+  festivalLogisticsItemSchema,
+  festivalLogisticsItemUpdateSchema,
+  festivalLogisticsStatusSchema,
   festivalPlanApprovalSubmitSchema,
   festivalEntryStatusSchema,
   invitationCreateSchema,
@@ -22,6 +25,7 @@ import {
 import {
   createFestivalCategory,
   createFestivalEntry,
+  createFestivalLogisticsItem,
   createFestivalInvitation,
   createFestivalBudgetItem,
   createFestival,
@@ -32,6 +36,8 @@ import {
   submitFestivalBudgetApproval,
   submitFestivalPlanApproval,
   updateFestivalEntryStatus,
+  updateFestivalLogisticsItem,
+  updateFestivalLogisticsStatus,
   updateFestivalCategory,
   updateFestivalInvitationStatus,
   updateFestival,
@@ -217,6 +223,70 @@ export async function updateFestivalEntryStatusAction(_state: FestivalActionStat
     await updateFestivalEntryStatus(parsed.data.festivalId, parsed.data.entryId, parsed.data.status, actor.id)
     refresh(parsed.data.festivalId)
     return { success: true, message: 'Festival entry status updated.' }
+  } catch (error) {
+    return actionError(error)
+  }
+}
+
+export async function createFestivalLogisticsItemAction(_state: FestivalActionState, form: FormData): Promise<FestivalActionState> {
+  try {
+    const actor = await requirePermission('festivals:manage')
+    const parsed = festivalLogisticsItemSchema.safeParse({
+      festivalId: value(form, 'festivalId'),
+      category: value(form, 'category'),
+      title: value(form, 'title'),
+      description: value(form, 'description'),
+      dueAt: value(form, 'dueAt'),
+      assignedMemberId: value(form, 'assignedMemberId'),
+    })
+    if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Check logistics item details.' }
+    await createFestivalLogisticsItem(parsed.data, actor.id)
+    refresh(parsed.data.festivalId)
+    return { success: true, message: 'Festival logistics item added.' }
+  } catch (error) {
+    return actionError(error)
+  }
+}
+
+export async function updateFestivalLogisticsItemAction(_state: FestivalActionState, form: FormData): Promise<FestivalActionState> {
+  try {
+    const actor = await requirePermission('festivals:manage')
+    const parsed = festivalLogisticsItemUpdateSchema.safeParse({
+      festivalId: value(form, 'festivalId'),
+      logisticsItemId: value(form, 'logisticsItemId'),
+      category: value(form, 'category'),
+      title: value(form, 'title'),
+      description: value(form, 'description'),
+      dueAt: value(form, 'dueAt'),
+      assignedMemberId: value(form, 'assignedMemberId'),
+    })
+    if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Check logistics item details.' }
+    const result = await updateFestivalLogisticsItem(parsed.data, actor.id)
+    refresh(parsed.data.festivalId)
+    return {
+      success: true,
+      message: result.updated ? 'Festival logistics item updated.' : 'No logistics item changes to save.',
+    }
+  } catch (error) {
+    return actionError(error)
+  }
+}
+
+export async function updateFestivalLogisticsStatusAction(_state: FestivalActionState, form: FormData): Promise<FestivalActionState> {
+  try {
+    const actor = await requirePermission('festivals:manage')
+    const parsed = festivalLogisticsStatusSchema.safeParse({
+      festivalId: value(form, 'festivalId'),
+      logisticsItemId: value(form, 'logisticsItemId'),
+      status: value(form, 'status'),
+    })
+    if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Choose a logistics status.' }
+    const result = await updateFestivalLogisticsStatus(parsed.data, actor.id)
+    refresh(parsed.data.festivalId)
+    return {
+      success: true,
+      message: result.changed ? 'Festival logistics status updated.' : 'Logistics item already has that status.',
+    }
   } catch (error) {
     return actionError(error)
   }

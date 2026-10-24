@@ -8,6 +8,7 @@ import {
   createFestivalEntryAction,
   createFestivalInvitationAction,
   createFestivalBudgetItemAction,
+  createFestivalLogisticsItemAction,
   decideFestivalApprovalAction,
   createFestivalAction,
   linkFestivalFinanceEntryAction,
@@ -18,11 +19,14 @@ import {
   updateFestivalInvitationStatusAction,
   updateFestivalCategoryAction,
   updateFestivalBudgetItemAction,
+  updateFestivalLogisticsItemAction,
+  updateFestivalLogisticsStatusAction,
   updateFestivalAction,
 } from '@/modules/festivals/actions'
 import type { FestivalActionState } from '@/modules/festivals/actions'
 import { formatKES } from '@/lib/money'
 import { formatNairobiDate } from '@/lib/dates'
+import { festivalLogisticsCategories } from '@/modules/festivals/rules'
 
 type FestivalFormAction = (state: FestivalActionState, form: FormData) => Promise<FestivalActionState>
 type FestivalRecord = {
@@ -45,6 +49,15 @@ type BudgetItemOption = {
   plannedAmount: number
   notes: string | null
 }
+type LogisticsItemOption = {
+  id: string
+  category: string
+  title: string
+  description: string | null
+  dueAt: Date | null
+  assignedMemberId: string | null
+}
+type LogisticsAssigneeOption = { id: string; fullName: string }
 type FinanceEntryOption = {
   id: string
   type: string
@@ -227,6 +240,64 @@ export function FestivalEntryStatusForm({ festivalId, entryId, status }: {
     <select className="input" id={`entry-status-${entryId}`} name="status" defaultValue={nextStatuses[0].value}>
       {nextStatuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
     </select>
+  </Form>
+}
+
+export function FestivalLogisticsItemForm({ festivalId, members, item }: {
+  festivalId: string
+  members: LogisticsAssigneeOption[]
+  item?: LogisticsItemOption
+}) {
+  const action = item ? updateFestivalLogisticsItemAction : createFestivalLogisticsItemAction
+  const prefix = item ? `festival-logistics-${item.id}` : 'festival-logistics-new'
+  return <Form action={action} submit={item ? 'Save logistics item' : 'Add logistics item'}>
+    <input type="hidden" name="festivalId" value={festivalId} />
+    {item && <input type="hidden" name="logisticsItemId" value={item.id} />}
+    <h3>{item ? `Edit ${item.title}` : 'Add a logistics item'}</h3>
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div><label className="label" htmlFor={`${prefix}-category`}>Area</label>
+        <select className="input" id={`${prefix}-category`} name="category" defaultValue={item?.category ?? 'TRANSPORT'}>
+          {festivalLogisticsCategories.map((category) => <option key={category} value={category}>{category.replaceAll('_', ' ').toLowerCase()}</option>)}
+        </select>
+      </div>
+      <div><label className="label" htmlFor={`${prefix}-title`}>Item</label>
+        <input className="input" id={`${prefix}-title`} name="title" maxLength={160} required defaultValue={item?.title ?? ''} placeholder="e.g. Confirm bus departure time" />
+      </div>
+    </div>
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div><label className="label" htmlFor={`${prefix}-due`}>Due date</label>
+        <input className="input" id={`${prefix}-due`} name="dueAt" type="date" defaultValue={item?.dueAt ? nairobiDateKey(item.dueAt) : ''} />
+      </div>
+      <div><label className="label" htmlFor={`${prefix}-assignee`}>Responsible member (optional)</label>
+        <select className="input" id={`${prefix}-assignee`} name="assignedMemberId" defaultValue={item?.assignedMemberId ?? ''}>
+          <option value="">Unassigned</option>
+          {members.map((member) => <option key={member.id} value={member.id}>{member.fullName}</option>)}
+        </select>
+      </div>
+    </div>
+    <div><label className="label" htmlFor={`${prefix}-description`}>Details</label>
+      <textarea className="input" id={`${prefix}-description`} name="description" maxLength={2000} rows={2} defaultValue={item?.description ?? ''} />
+      <p className="mt-1 text-sm text-slate-600">Avoid recording personal details that are not needed for festival coordination.</p>
+    </div>
+  </Form>
+}
+
+export function FestivalLogisticsStatusForm({ festivalId, logisticsItemId, status }: {
+  festivalId: string
+  logisticsItemId: string
+  status: string
+}) {
+  return <Form action={updateFestivalLogisticsStatusAction} submit="Update logistics status" className="flex flex-wrap items-end gap-2">
+    <input type="hidden" name="festivalId" value={festivalId} />
+    <input type="hidden" name="logisticsItemId" value={logisticsItemId} />
+    <div className="min-w-44">
+      <label className="label" htmlFor={`festival-logistics-status-${logisticsItemId}`}>Status</label>
+      <select className="input" id={`festival-logistics-status-${logisticsItemId}`} name="status" defaultValue={status}>
+        <option value="OPEN">Open</option>
+        <option value="IN_PROGRESS">In progress</option>
+        <option value="COMPLETED">Completed</option>
+      </select>
+    </div>
   </Form>
 }
 

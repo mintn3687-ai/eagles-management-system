@@ -22,6 +22,9 @@ import type {
   FestivalInvitationCreateInput,
   FestivalFinanceLinkInput,
   FestivalFinanceUnlinkInput,
+  FestivalLogisticsItemInput,
+  FestivalLogisticsItemUpdateInput,
+  FestivalLogisticsStatusInput,
   FestivalPlanApprovalSubmitInput,
   FestivalUpdateInput,
 } from './schema'
@@ -327,6 +330,130 @@ export async function getFestivalPlanning(festivalId: string) {
       approvedAmount: item.approval?.status === 'APPROVED' ? item.approval.approvedAmount : null,
     }))),
   }
+}
+
+export async function createFestivalLogisticsItem(input: FestivalLogisticsItemInput, actorId: string) {
+  return festivalsRepository.transaction(async (tx) => {
+    if (!await festivalsRepository.festivalExists(tx, input.festivalId)) {
+      throw new FestivalServiceError('Festival not found.')
+    }
+    if (input.assignedMemberId && !await festivalsRepository.isCurrentActiveMember(tx, input.assignedMemberId)) {
+      throw new FestivalServiceError('Choose an active member in the current season as the assignee.')
+    }
+    const item = await festivalsRepository.createLogisticsItem(tx, {
+      festivalId: input.festivalId,
+      category: input.category,
+      title: input.title,
+      description: input.description || null,
+      dueAt: dateAtNairobi(input.dueAt),
+      assignedMemberId: input.assignedMemberId || null,
+      createdById: actorId,
+    })
+    await writeAuditLog(tx, {
+      actorId,
+      action: 'FESTIVAL_LOGISTICS_ITEM_CREATED',
+      entity: 'FestivalLogisticsItem',
+      entityId: item.id,
+      details: {
+        festivalId: input.festivalId,
+        category: item.category,
+        assignedMemberId: item.assignedMemberId,
+        dueAt: item.dueAt?.toISOString() ?? null,
+      },
+    })
+    return item
+  }).catch(mapError)
+}
+
+export async function updateFestivalLogisticsItem(input: FestivalLogisticsItemUpdateInput, actorId: string) {
+  return festivalsRepository.transaction(async (tx) => {
+    const previous = await festivalsRepository.findLogisticsItem(tx, input.festivalId, input.logisticsItemId)
+    if (!previous) throw new FestivalServiceError('Logistics item not found for this festival.')
+    if (input.assignedMemberId && !await festivalsRepository.isCurrentActiveMember(tx, input.assignedMemberId)) {
+      throw new FestivalServiceError('Choose an active member in the current season as the assignee.')
+    }
+    const next = {
+      category: input.category,
+      title: input.title,
+      description: input.description || null,
+      dueAt: dateAtNairobi(input.dueAt),
+      assignedMemberId: input.assignedMemberId || null,
+    }
+    const itemChanged = previous.category !== next.category
+      || previous.title !== next.title
+      || previous.description !== next.description
+      || previous.dueAt?.getTime() !== next.dueAt?.getTime()
+      || previous.assignedMemberId !== next.assignedMemberId
+    if (!itemChanged) return { updated: false }
+
+    const updated = await festivalsRepository.updateLogisticsItem(
+      tx,
+      input.festivalId,
+      input.logisticsItemId,
+      next,
+    )
+    if (!updated.count) throw new FestivalServiceError('Logistics item not found for this festival.')
+    await writeAuditLog(tx, {
+      actorId,
+      action: 'FESTIVAL_LOGISTICS_ITEM_UPDATED',
+      entity: 'FestivalLogisticsItem',
+      entityId: previous.id,
+      details: {
+        festivalId: input.festivalId,
+        from: {
+          category: previous.category,
+          title: previous.title,
+          assignedMemberId: previous.assignedMemberId,
+          dueAt: previous.dueAt?.toISOString() ?? null,
+        },
+        to: {
+          category: next.category,
+          title: next.title,
+          assignedMemberId: next.assignedMemberId,
+          dueAt: next.dueAt?.toISOString() ?? null,
+        },
+      },
+    })
+    return { updated: true }
+  }).catch(mapError)
+}
+
+export async function updateFestivalLogisticsStatus(
+  input: FestivalLogisticsStatusInput,
+  actorId: string,
+) {
+  return festivalsRepository.transaction(async (tx) => {
+    const item = await festivalsRepository.findLogisticsItem(tx, input.festivalId, input.logisticsItemId)
+    if (!item) throw new FestivalServiceError('Logistics item not found for this festival.')
+    if (item.status === input.status) return { status: item.status, changed: false }
+
+    const completedAt = input.status === 'COMPLETED' ? new Date() : null
+    const updated = await festivalsRepository.transitionLogisticsItem(
+      tx,
+      input.festivalId,
+      input.logisticsItemId,
+      item.status,
+      {
+        status: input.status,
+        completedAt,
+        completedById: completedAt ? actorId : null,
+      },
+    )
+    if (!updated.count) throw new FestivalServiceError('This logistics item has already changed status.')
+    await writeAuditLog(tx, {
+      actorId,
+      action: 'FESTIVAL_LOGISTICS_STATUS_CHANGED',
+      entity: 'FestivalLogisticsItem',
+      entityId: item.id,
+      details: {
+        festivalId: input.festivalId,
+        from: item.status,
+        to: input.status,
+        completedAt: completedAt?.toISOString() ?? null,
+      },
+    })
+    return { status: input.status, changed: true }
+  }).catch(mapError)
 }
 
 export async function createFestivalBudgetItem(input: FestivalBudgetItemInput, actorId: string) {
