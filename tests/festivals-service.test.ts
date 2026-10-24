@@ -32,9 +32,12 @@ const mocks = vi.hoisted(() => ({
   createApproval: vi.fn(),
   resubmitRejectedApproval: vi.fn(),
   resubmitApprovedApproval: vi.fn(),
+  refreshPendingApproval: vi.fn(),
   updatePendingApprovalAmount: vi.fn(),
   findApprovalById: vi.fn(),
   decideApproval: vi.fn(),
+  pendingBudgetApprovals: vi.fn(),
+  budgetItemsForProposal: vi.fn(),
   findFinanceEntry: vi.fn(),
   findFinanceLinkByEntry: vi.fn(),
   createFinanceLink: vi.fn(),
@@ -76,9 +79,12 @@ vi.mock('../src/modules/festivals/repository', () => ({
     createApproval: mocks.createApproval,
     resubmitRejectedApproval: mocks.resubmitRejectedApproval,
     resubmitApprovedApproval: mocks.resubmitApprovedApproval,
+    refreshPendingApproval: mocks.refreshPendingApproval,
     updatePendingApprovalAmount: mocks.updatePendingApprovalAmount,
     findApprovalById: mocks.findApprovalById,
     decideApproval: mocks.decideApproval,
+    pendingBudgetApprovals: mocks.pendingBudgetApprovals,
+    budgetItemsForProposal: mocks.budgetItemsForProposal,
     findFinanceEntry: mocks.findFinanceEntry,
     findFinanceLinkByEntry: mocks.findFinanceLinkByEntry,
     createFinanceLink: mocks.createFinanceLink,
@@ -163,9 +169,12 @@ describe('festival entries and invitations service', () => {
     mocks.update.mockImplementation(async (_tx, _festivalId, data) => ({ id: 'festival-id', ...data }))
     mocks.findFestivalForApproval.mockResolvedValue({ id: 'festival-id', status: 'PLANNING' })
     mocks.findApprovalByTargetKey.mockResolvedValue(null)
+    mocks.budgetItemsForProposal.mockResolvedValue([])
+    mocks.pendingBudgetApprovals.mockResolvedValue([])
     mocks.createApproval.mockResolvedValue({ id: 'approval-id', status: 'PENDING' })
     mocks.resubmitRejectedApproval.mockResolvedValue({ count: 1 })
     mocks.resubmitApprovedApproval.mockResolvedValue({ count: 1 })
+    mocks.refreshPendingApproval.mockResolvedValue({ count: 1 })
     mocks.updatePendingApprovalAmount.mockResolvedValue({ count: 1 })
     mocks.updateBudgetItem.mockResolvedValue({ count: 1 })
     mocks.countFinanceLinksForBudgetItem.mockResolvedValue(0)
@@ -532,6 +541,61 @@ describe('festival entries and invitations service', () => {
     }))
   })
 
+  it('submits every unapproved budget line with the complete plan for unified review', async () => {
+    mocks.budgetItemsForProposal.mockResolvedValue([
+      { id: 'transport-budget', plannedAmount: 50000 },
+      { id: 'meal-budget', plannedAmount: 20000 },
+    ])
+    mocks.findApprovalByTargetKey
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'approved-budget', status: 'APPROVED' })
+
+    await expect(submitFestivalPlanApproval({ festivalId: 'festival-id' }, 'committee-user'))
+      .resolves.toMatchObject({ status: 'PENDING' })
+
+    expect(mocks.createApproval).toHaveBeenCalledTimes(2)
+    expect(mocks.createApproval).toHaveBeenCalledWith({}, expect.objectContaining({
+      targetKey: 'BUDGET:transport-budget',
+      requestedAmount: 50000,
+      submittedById: 'committee-user',
+    }))
+    expect(mocks.createApproval).not.toHaveBeenCalledWith({}, expect.objectContaining({
+      targetKey: 'BUDGET:meal-budget',
+    }))
+  })
+
+  it('returns an approved overall plan to review when a new budget line is added', async () => {
+    mocks.createBudgetItem.mockResolvedValueOnce({
+      id: 'budget-item-id',
+      category: 'Accommodation',
+      plannedAmount: 30000,
+    })
+    mocks.findApprovalByTargetKey
+      .mockResolvedValueOnce({ id: 'plan-approval-id', status: 'APPROVED' })
+      .mockResolvedValueOnce(null)
+
+    await createFestivalBudgetItem({
+      festivalId: 'festival-id',
+      type: 'EXPENSE',
+      category: 'Accommodation',
+      plannedAmount: 30000,
+      notes: '',
+    }, 'committee-user')
+
+    expect(mocks.resubmitApprovedApproval).toHaveBeenCalledWith(
+      {},
+      'PLAN:festival-id',
+      expect.objectContaining({ status: 'PENDING', submittedById: 'committee-user' }),
+    )
+    expect(mocks.createApproval).toHaveBeenCalledWith({}, expect.objectContaining({
+      targetKey: 'BUDGET:budget-item-id',
+      requestedAmount: 30000,
+      type: 'BUDGET',
+    }))
+  })
+
   it('submits a budget approval using the current planned amount', async () => {
     await expect(submitFestivalBudgetApproval({
       festivalId: 'festival-id',
@@ -544,25 +608,101 @@ describe('festival entries and invitations service', () => {
     }))
   })
 
-  it('requires a reason for reduced budget approval and saves full decision metadata', async () => {
+  it('prevents separate budget decisions outside the unified plan review', async () => {
     await expect(decideFestivalApproval({
-      approvalId: 'approval-id', decision: 'APPROVED', approvedAmount: 40000, reason: '',
-    }, 'committee-user')).rejects.toThrow(/Explain why/)
+      approvalId: 'approval-id',
+      decision: 'APPROVED',
+      approvedAmount: 50000,
+      reason: '',
+    }, 'committee-user')).rejects.toThrow(/decided together from the festival plan review/)
+    expect(mocks.pendingBudgetApprovals).not.toHaveBeenCalled()
     expect(mocks.decideApproval).not.toHaveBeenCalled()
+  })
+
+  it('decides the plan and every pending budget request atomically with audit records', async () => {
+    mocks.findApprovalById.mockResolvedValue({
+      id: 'plan-approval-id',
+      festivalId: 'festival-id',
+      type: 'PLAN',
+      status: 'PENDING',
+      requestedAmount: null,
+    })
+    mocks.pendingBudgetApprovals.mockResolvedValue([
+      { id: 'transport-approval-id', requestedAmount: 50000 },
+      { id: 'meal-approval-id', requestedAmount: 20000 },
+    ])
 
     await expect(decideFestivalApproval({
-      approvalId: 'approval-id', decision: 'APPROVED', approvedAmount: 40000, reason: 'Reduced costs',
-    }, 'committee-user')).resolves.toMatchObject({ status: 'APPROVED', approvedAmount: 40000 })
-    expect(mocks.decideApproval).toHaveBeenCalledWith({}, 'approval-id', expect.objectContaining({
+      approvalId: 'plan-approval-id',
+      decision: 'APPROVED',
+      approvedAmount: null,
+      reason: '',
+    }, 'approver')).resolves.toMatchObject({
       status: 'APPROVED',
-      approvedAmount: 40000,
-      decidedById: 'committee-user',
-      decisionReason: 'Reduced costs',
-      decidedAt: expect.any(Date),
+      includedBudgetApprovals: 2,
+    })
+
+    expect(mocks.decideApproval).toHaveBeenCalledTimes(3)
+    expect(mocks.decideApproval).toHaveBeenCalledWith({}, 'transport-approval-id', expect.objectContaining({
+      status: 'APPROVED',
+      approvedAmount: 50000,
+      decidedById: 'approver',
+    }))
+    expect(mocks.decideApproval).toHaveBeenCalledWith({}, 'meal-approval-id', expect.objectContaining({
+      status: 'APPROVED',
+      approvedAmount: 20000,
+    }))
+    expect(mocks.decideApproval).toHaveBeenCalledWith({}, 'plan-approval-id', expect.objectContaining({
+      status: 'APPROVED',
+      decidedById: 'approver',
+    }))
+    expect(mocks.writeAuditLog).toHaveBeenCalledWith({}, expect.objectContaining({
+      entityId: 'transport-approval-id',
+      details: expect.objectContaining({ decidedWithPlanApprovalId: 'plan-approval-id' }),
+    }))
+  })
+
+  it('requires a reason and rejects all pending budget requests with the overall plan', async () => {
+    mocks.findApprovalById.mockResolvedValue({
+      id: 'plan-approval-id',
+      festivalId: 'festival-id',
+      type: 'PLAN',
+      status: 'PENDING',
+      requestedAmount: null,
+    })
+    mocks.pendingBudgetApprovals.mockResolvedValue([
+      { id: 'transport-approval-id', requestedAmount: 50000 },
+    ])
+    const decision = {
+      approvalId: 'plan-approval-id',
+      decision: 'REJECTED' as const,
+      approvedAmount: null,
+      reason: 'Need a revised transport quote.',
+    }
+
+    await expect(decideFestivalApproval({ ...decision, reason: '' }, 'approver'))
+      .rejects.toThrow(/reason/)
+    expect(mocks.decideApproval).not.toHaveBeenCalled()
+
+    await expect(decideFestivalApproval(decision, 'approver')).resolves.toMatchObject({
+      status: 'REJECTED',
+      includedBudgetApprovals: 1,
+    })
+    expect(mocks.decideApproval).toHaveBeenCalledWith({}, 'transport-approval-id', expect.objectContaining({
+      status: 'REJECTED',
+      approvedAmount: null,
+      decisionReason: 'Need a revised transport quote.',
     }))
   })
 
   it('requires a rejection reason and guards concurrent approval decisions', async () => {
+    mocks.findApprovalById.mockResolvedValue({
+      id: 'approval-id',
+      festivalId: 'festival-id',
+      type: 'PLAN',
+      status: 'PENDING',
+      requestedAmount: null,
+    })
     await expect(decideFestivalApproval({
       approvalId: 'approval-id', decision: 'REJECTED', approvedAmount: null, reason: '',
     }, 'committee-user')).rejects.toThrow(/reason when rejecting/)
