@@ -21,5 +21,6 @@ export default defineConfig({
     'tests/push-service.test.ts',
     'tests/check-in-qr.test.ts',
     'tests/festivals.test.ts',
+    'tests/festivals-service.test.ts',
   ] },
 })

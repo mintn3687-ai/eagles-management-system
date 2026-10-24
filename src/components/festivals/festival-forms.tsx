@@ -4,7 +4,13 @@ import { useActionState, type ReactNode } from 'react'
 import { SubmitButton } from '@/components/submit-button'
 import { nairobiDateKey } from '@/lib/dates'
 import {
+  createFestivalCategoryAction,
+  createFestivalEntryAction,
+  createFestivalInvitationAction,
   createFestivalAction,
+  updateFestivalEntryStatusAction,
+  updateFestivalInvitationStatusAction,
+  updateFestivalCategoryAction,
   updateFestivalAction,
 } from '@/modules/festivals/actions'
 import type { FestivalActionState } from '@/modules/festivals/actions'
@@ -21,6 +27,8 @@ type FestivalRecord = {
   status: string
   notes: string | null
 }
+type FestivalCategoryOption = { id: string; name: string; defaultDeadline: Date | null }
+type ProductionOption = { id: string; title: string }
 
 function Form({ action: serverAction, submit, children }: {
   action: FestivalFormAction
@@ -88,5 +96,110 @@ export function FestivalUpdateForm({ festival, today }: { festival: FestivalReco
     <input type="hidden" name="festivalId" value={festival.id} />
     <h2>Festival details</h2>
     <FestivalFields festival={festival} today={today} />
+  </Form>
+}
+
+export function FestivalInvitationForm({ festivalId, today }: { festivalId: string; today: string }) {
+  return <Form action={createFestivalInvitationAction} submit="Record invitation">
+    <input type="hidden" name="festivalId" value={festivalId} />
+    <h3>Record an invitation</h3>
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div><label className="label" htmlFor="invitation-received">Received on</label>
+        <input className="input" id="invitation-received" name="receivedAt" type="date" required defaultValue={today} />
+      </div>
+      <div><label className="label" htmlFor="invitation-response-deadline">Response deadline</label>
+        <input className="input" id="invitation-response-deadline" name="responseDeadline" type="date" />
+      </div>
+    </div>
+    <div><label className="label" htmlFor="invitation-notes">Notes</label>
+      <textarea className="input" id="invitation-notes" name="notes" maxLength={2000} rows={2} />
+    </div>
+  </Form>
+}
+
+export function FestivalInvitationStatusForm({ festivalId, invitationId }: { festivalId: string; invitationId: string }) {
+  return <Form action={updateFestivalInvitationStatusAction} submit="Save response">
+    <input type="hidden" name="festivalId" value={festivalId} />
+    <input type="hidden" name="invitationId" value={invitationId} />
+    <label className="sr-only" htmlFor={`invitation-status-${invitationId}`}>Invitation response</label>
+    <select className="input" id={`invitation-status-${invitationId}`} name="status" defaultValue="ACCEPTED">
+      <option value="ACCEPTED">Accept invitation</option>
+      <option value="DECLINED">Decline invitation</option>
+    </select>
+  </Form>
+}
+
+export function FestivalCategoryForm({ festivalId, category }: {
+  festivalId: string
+  category?: FestivalCategoryOption
+}) {
+  const action = category ? updateFestivalCategoryAction : createFestivalCategoryAction
+  return <Form action={action} submit={category ? 'Save category' : 'Add category'}>
+    <input type="hidden" name="festivalId" value={festivalId} />
+    {category && <input type="hidden" name="categoryId" value={category.id} />}
+    <h3>{category ? `Edit ${category.name}` : 'Configure an entry category'}</h3>
+    <div><label className="label" htmlFor={`festival-category-name-${category?.id ?? 'new'}`}>Category or class</label>
+      <input className="input" id={`festival-category-name-${category?.id ?? 'new'}`} name="name" maxLength={120} required defaultValue={category?.name ?? ''} />
+    </div>
+    <div><label className="label" htmlFor={`festival-category-deadline-${category?.id ?? 'new'}`}>Default submission deadline</label>
+      <input className="input" id={`festival-category-deadline-${category?.id ?? 'new'}`} name="defaultDeadline" type="date" defaultValue={category?.defaultDeadline ? nairobiDateKey(category.defaultDeadline) : ''} />
+    </div>
+    <p className="text-sm text-slate-600">Use the category names and dates provided by the festival organizer.</p>
+  </Form>
+}
+
+export function FestivalEntryForm({ festivalId, categories, productions }: {
+  festivalId: string
+  categories: FestivalCategoryOption[]
+  productions: ProductionOption[]
+}) {
+  return <Form action={createFestivalEntryAction} submit="Create competition entry">
+    <input type="hidden" name="festivalId" value={festivalId} />
+    <h3>Competition entry</h3>
+    <div><label className="label" htmlFor="festival-entry-title">Production or performance item</label>
+      <input className="input" id="festival-entry-title" name="itemTitle" maxLength={160} required />
+    </div>
+    <div><label className="label" htmlFor="festival-entry-category">Festival category or class</label>
+      <select className="input" id="festival-entry-category" name="categoryId" required defaultValue="">
+        <option value="" disabled>Select a configured category</option>
+        {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+      </select>
+    </div>
+    <div><label className="label" htmlFor="festival-entry-production">Link an existing production (optional)</label>
+      <select className="input" id="festival-entry-production" name="productionId" defaultValue="">
+        <option value="">Not linked to a production</option>
+        {productions.map((production) => <option key={production.id} value={production.id}>{production.title}</option>)}
+      </select>
+    </div>
+    <div><label className="label" htmlFor="festival-entry-deadline">Submission deadline (optional override)</label>
+      <input className="input" id="festival-entry-deadline" name="deadline" type="date" />
+      <p className="mt-1 text-sm text-slate-600">Leave blank to use the category’s default deadline.</p>
+    </div>
+    <div><label className="label" htmlFor="festival-entry-notes">Notes</label>
+      <textarea className="input" id="festival-entry-notes" name="notes" maxLength={2000} rows={2} />
+    </div>
+  </Form>
+}
+
+export function FestivalEntryStatusForm({ festivalId, entryId, status }: {
+  festivalId: string
+  entryId: string
+  status: string
+}) {
+  const nextStatuses = status === 'PENDING'
+    ? [{ value: 'PREPARING', label: 'Preparing' }, { value: 'SUBMITTED', label: 'Submitted' }]
+    : status === 'PREPARING'
+      ? [{ value: 'SUBMITTED', label: 'Submitted' }]
+      : status === 'SUBMITTED'
+        ? [{ value: 'CONFIRMED', label: 'Confirmed' }, { value: 'REJECTED', label: 'Not accepted' }]
+        : []
+  if (!nextStatuses.length) return <span className="text-sm text-slate-600">No further status changes</span>
+  return <Form action={updateFestivalEntryStatusAction} submit="Update entry status">
+    <input type="hidden" name="festivalId" value={festivalId} />
+    <input type="hidden" name="entryId" value={entryId} />
+    <label className="sr-only" htmlFor={`entry-status-${entryId}`}>Next entry status</label>
+    <select className="input" id={`entry-status-${entryId}`} name="status" defaultValue={nextStatuses[0].value}>
+      {nextStatuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+    </select>
   </Form>
 }

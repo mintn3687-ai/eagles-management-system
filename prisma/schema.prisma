@@ -151,6 +151,20 @@ enum FestivalStatus {
   CANCELLED
 }
 
+enum FestivalInvitationStatus {
+  RECEIVED
+  ACCEPTED
+  DECLINED
+}
+
+enum FestivalEntryStatus {
+  PENDING
+  PREPARING
+  SUBMITTED
+  CONFIRMED
+  REJECTED
+}
+
 enum ProductionTaskStatus {
   OPEN
   IN_PROGRESS
@@ -1170,6 +1184,58 @@ model Festival {
 
   @@index([year, status, startDate])
   @@index([name, year])
+  @@index([createdById])
+}
+
+model FestivalInvitation {
+  id               String                   @id @default(cuid())
+  festivalId       String
+  receivedAt       DateTime                 @db.Timestamp(3)
+  responseDeadline DateTime?                @db.Timestamp(3)
+  status           FestivalInvitationStatus @default(RECEIVED)
+  respondedAt      DateTime?                @db.Timestamp(3)
+  notes            String?
+  recordedById     String
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+
+  @@index([festivalId, status, receivedAt])
+  @@index([responseDeadline, status])
+  @@index([recordedById])
+}
+
+model FestivalEntryCategory {
+  id              String    @id @default(cuid())
+  festivalId      String
+  name            String
+  defaultDeadline DateTime? @db.Timestamp(3)
+  createdById     String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([festivalId, name])
+  @@index([festivalId, defaultDeadline])
+  @@index([createdById])
+}
+
+model FestivalEntry {
+  id            String             @id @default(cuid())
+  festivalId    String
+  categoryId    String
+  productionId  String?
+  itemTitle     String
+  status        FestivalEntryStatus @default(PENDING)
+  deadline      DateTime?          @db.Timestamp(3)
+  submittedAt   DateTime?          @db.Timestamp(3)
+  confirmedAt   DateTime?          @db.Timestamp(3)
+  notes         String?
+  createdById   String
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@index([festivalId, status, deadline])
+  @@index([categoryId])
+  @@index([productionId])
   @@index([createdById])
 }
 

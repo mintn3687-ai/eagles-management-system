@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { hasPermission } from '../src/lib/permission-rules'
-import { festivalCreateSchema, festivalUpdateSchema } from '../src/modules/festivals/schema'
+import {
+  entryCategorySchema,
+  festivalCreateSchema,
+  festivalEntryCreateSchema,
+  festivalUpdateSchema,
+  invitationCreateSchema,
+} from '../src/modules/festivals/schema'
+import {
+  canTransitionEntry,
+  isEntryOverdue,
+  isInvitationOverdue,
+} from '../src/modules/festivals/rules'
 
 const createInput = {
   name: 'Kenya National Drama Festivals',
@@ -34,6 +45,45 @@ describe('festival planning foundation', () => {
       festivalId: 'festival-id',
       status: 'SUBMITTED',
     }).success).toBe(false)
+  })
+
+  it('accepts user-configured categories, invitation dates, and production-linked entries', () => {
+    expect(entryCategorySchema.safeParse({
+      festivalId: 'festival-id',
+      name: 'Original play',
+      defaultDeadline: '2027-03-01',
+    }).success).toBe(true)
+    expect(invitationCreateSchema.safeParse({
+      festivalId: 'festival-id',
+      receivedAt: '2027-01-20',
+      responseDeadline: '2027-02-10',
+      notes: '',
+    }).success).toBe(true)
+    expect(invitationCreateSchema.safeParse({
+      festivalId: 'festival-id',
+      receivedAt: '2027-02-10',
+      responseDeadline: '2027-01-20',
+      notes: '',
+    }).success).toBe(false)
+    expect(festivalEntryCreateSchema.safeParse({
+      festivalId: 'festival-id',
+      categoryId: 'category-id',
+      productionId: 'production-id',
+      itemTitle: 'The River',
+      deadline: '',
+      notes: '',
+    }).success).toBe(true)
+  })
+
+  it('enforces forward entry status changes and computes overdue states from configured dates', () => {
+    expect(canTransitionEntry('PENDING', 'PREPARING')).toBe(true)
+    expect(canTransitionEntry('SUBMITTED', 'CONFIRMED')).toBe(true)
+    expect(canTransitionEntry('CONFIRMED', 'PREPARING')).toBe(false)
+    expect(isEntryOverdue('PREPARING', '2027-03-01', '2027-03-02')).toBe(true)
+    expect(isEntryOverdue('SUBMITTED', '2027-03-01', '2027-03-02')).toBe(false)
+    expect(isEntryOverdue('PREPARING', '2027-03-02', '2027-03-02')).toBe(false)
+    expect(isInvitationOverdue('RECEIVED', '2027-02-01', '2027-02-02')).toBe(true)
+    expect(isInvitationOverdue('ACCEPTED', '2027-02-01', '2027-02-02')).toBe(false)
   })
 
   it('restricts festival planning to committee and super admins', () => {

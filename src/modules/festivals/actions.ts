@@ -3,12 +3,24 @@
 import { revalidatePath } from 'next/cache'
 import { AccessError, requirePermission } from '@/lib/permissions'
 import {
+  entryCategorySchema,
+  entryCategoryUpdateSchema,
   festivalCreateSchema,
+  festivalEntryCreateSchema,
+  festivalEntryStatusSchema,
+  invitationCreateSchema,
+  invitationStatusSchema,
   festivalUpdateSchema,
 } from './schema'
 import {
+  createFestivalCategory,
+  createFestivalEntry,
+  createFestivalInvitation,
   createFestival,
   FestivalServiceError,
+  updateFestivalEntryStatus,
+  updateFestivalCategory,
+  updateFestivalInvitationStatus,
   updateFestival,
 } from './service'
 
@@ -73,6 +85,113 @@ export async function updateFestivalAction(_state: FestivalActionState, form: Fo
     await updateFestival(parsed.data, actor.id)
     refresh(parsed.data.festivalId)
     return { success: true, message: 'Festival details updated.' }
+  } catch (error) {
+    return actionError(error)
+  }
+}
+
+export async function createFestivalInvitationAction(_state: FestivalActionState, form: FormData): Promise<FestivalActionState> {
+  try {
+    const actor = await requirePermission('festivals:manage')
+    const parsed = invitationCreateSchema.safeParse({
+      festivalId: value(form, 'festivalId'),
+      receivedAt: value(form, 'receivedAt'),
+      responseDeadline: value(form, 'responseDeadline'),
+      notes: value(form, 'notes'),
+    })
+    if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Check invitation details.' }
+    await createFestivalInvitation(parsed.data, actor.id)
+    refresh(parsed.data.festivalId)
+    return { success: true, message: 'Festival invitation recorded.' }
+  } catch (error) {
+    return actionError(error)
+  }
+}
+
+export async function updateFestivalInvitationStatusAction(_state: FestivalActionState, form: FormData): Promise<FestivalActionState> {
+  try {
+    const actor = await requirePermission('festivals:manage')
+    const parsed = invitationStatusSchema.safeParse({
+      festivalId: value(form, 'festivalId'),
+      invitationId: value(form, 'invitationId'),
+      status: value(form, 'status'),
+    })
+    if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Choose an invitation response.' }
+    await updateFestivalInvitationStatus(parsed.data.festivalId, parsed.data.invitationId, parsed.data.status, actor.id)
+    refresh(parsed.data.festivalId)
+    return { success: true, message: 'Invitation response saved.' }
+  } catch (error) {
+    return actionError(error)
+  }
+}
+
+export async function createFestivalCategoryAction(_state: FestivalActionState, form: FormData): Promise<FestivalActionState> {
+  try {
+    const actor = await requirePermission('festivals:manage')
+    const parsed = entryCategorySchema.safeParse({
+      festivalId: value(form, 'festivalId'),
+      name: value(form, 'name'),
+      defaultDeadline: value(form, 'defaultDeadline'),
+    })
+    if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Check category details.' }
+    await createFestivalCategory(parsed.data, actor.id)
+    refresh(parsed.data.festivalId)
+    return { success: true, message: 'Festival category added.' }
+  } catch (error) {
+    return actionError(error)
+  }
+}
+
+export async function updateFestivalCategoryAction(_state: FestivalActionState, form: FormData): Promise<FestivalActionState> {
+  try {
+    const actor = await requirePermission('festivals:manage')
+    const parsed = entryCategoryUpdateSchema.safeParse({
+      festivalId: value(form, 'festivalId'),
+      categoryId: value(form, 'categoryId'),
+      name: value(form, 'name'),
+      defaultDeadline: value(form, 'defaultDeadline'),
+    })
+    if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Check category details.' }
+    await updateFestivalCategory(parsed.data, actor.id)
+    refresh(parsed.data.festivalId)
+    return { success: true, message: 'Festival category updated.' }
+  } catch (error) {
+    return actionError(error)
+  }
+}
+
+export async function createFestivalEntryAction(_state: FestivalActionState, form: FormData): Promise<FestivalActionState> {
+  try {
+    const actor = await requirePermission('festivals:manage')
+    const parsed = festivalEntryCreateSchema.safeParse({
+      festivalId: value(form, 'festivalId'),
+      categoryId: value(form, 'categoryId'),
+      productionId: value(form, 'productionId'),
+      itemTitle: value(form, 'itemTitle'),
+      deadline: value(form, 'deadline'),
+      notes: value(form, 'notes'),
+    })
+    if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Check entry details.' }
+    await createFestivalEntry(parsed.data, actor.id)
+    refresh(parsed.data.festivalId)
+    return { success: true, message: 'Festival entry created.' }
+  } catch (error) {
+    return actionError(error)
+  }
+}
+
+export async function updateFestivalEntryStatusAction(_state: FestivalActionState, form: FormData): Promise<FestivalActionState> {
+  try {
+    const actor = await requirePermission('festivals:manage')
+    const parsed = festivalEntryStatusSchema.safeParse({
+      festivalId: value(form, 'festivalId'),
+      entryId: value(form, 'entryId'),
+      status: value(form, 'status'),
+    })
+    if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Choose an entry status.' }
+    await updateFestivalEntryStatus(parsed.data.festivalId, parsed.data.entryId, parsed.data.status, actor.id)
+    refresh(parsed.data.festivalId)
+    return { success: true, message: 'Festival entry status updated.' }
   } catch (error) {
     return actionError(error)
   }
