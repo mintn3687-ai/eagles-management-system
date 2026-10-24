@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phases 2–7 provide an admin-only festival register, festival details, invitation and entry tracking, configurable categories and deadlines, festival budget lines, explicit finance-ledger links, approval workflows, logistics coordination, and a planning dashboard. Committee members and super admins with the centralized festival and finance permissions can manage these records.
+Phases 2–8 provide an admin-only festival register, festival details, invitation and entry tracking, configurable categories and deadlines, festival budget lines, explicit finance-ledger links, approval workflows, logistics coordination, and a planning dashboard. Committee members and super admins with the centralized festival and finance permissions can manage these records.
 
 Any committee member may approve a festival plan or budget, including their own submission. Budget approvals may be partial; a reason is required when the approved amount is below the requested amount. Rejections require a reason. Approval decisions record the submitter, approver, timestamps, amounts, and reason. The current decision is shown on the festival page and earlier decisions are retained in the audit log. Editing an approved plan or budget item automatically returns it to Pending and submits the changed request again. Saving an unchanged record does not reset its approval.
 
@@ -42,6 +42,7 @@ Document uploads are not included. The existing production module stores an opti
 
 - Run `npx vitest run tests/festivals.test.ts tests/festivals-service.test.ts`, `npm test`, `npm run typecheck`, and `npm run build`.
 - Verify a Member cannot access `/admin/festivals`, while Committee and Super Admin can.
+- The festival register and detail pages require festival-management and finance-management permissions because the overview exposes financial totals; mutations validate their specific festival, finance, or approval permission at the server action.
 - Verify the dashboard only includes open invitation/entry/logistics deadlines through the next 30 days, marks overdue items, and shows the correct per-festival entry, approval, budget, and logistics summaries.
 - Budget routes/actions require both festival-management and finance-management permissions. Approval decisions require the centralized festival-approval permission; finance-management permission is additionally checked for decisions.
 - After separate approval of all five migrations and deployment to an isolated test database, create a disposable festival, invitation, category, entry, budget item, and logistics item. Test status transitions and deadlines, submit and decide plan/budget approvals (including a partial amount and required reason), edit an approved plan and budget item to verify they return to Pending, assign an active member to a logistics item, complete and reopen it, verify completion metadata and overdue status, link/unlink a disposable finance entry and verify its ledger value remains unchanged, and inspect audit events. Do not write to a Preview or Production database unless it is confirmed isolated.

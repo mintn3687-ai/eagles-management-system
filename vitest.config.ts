@@ -22,5 +22,6 @@ export default defineConfig({
     'tests/check-in-qr.test.ts',
     'tests/festivals.test.ts',
     'tests/festivals-service.test.ts',
+    'tests/festivals-actions.test.ts',
   ] },
 })

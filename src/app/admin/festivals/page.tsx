@@ -13,6 +13,7 @@ function festivalDates(startDate: Date | null, endDate: Date | null) {
 
 export default async function FestivalsPage() {
   await pagePermission('festivals:manage')
+  await pagePermission('finance:manage')
   const today = nairobiDateKey()
   const [festivals, dashboard] = await Promise.all([
     listFestivals(),
