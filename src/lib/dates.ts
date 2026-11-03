@@ -20,6 +20,11 @@ export function formatNairobiDate(date: Date, includeTime = false): string {
     ...(includeTime ? { hour: '2-digit', minute: '2-digit' } as const : {}),
   }).format(date)
 }
+export function formatNairobiTime(date: Date): string {
+  return new Intl.DateTimeFormat('en-KE', {
+    timeZone: NAIROBI_TIMEZONE, hour: '2-digit', minute: '2-digit',
+  }).format(date)
+}
 export function nairobiMonthBounds(date: Date = new Date()): { start: Date; end: Date } {
   const [year, month] = nairobiDateKey(date).split('-').map(Number)
   return {

@@ -4,6 +4,7 @@ import { useActionState } from 'react'
 import { setManualAttendanceAction } from '@/app/admin/rehearsals/actions'
 import { SubmitButton } from '@/components/submit-button'
 import Link from 'next/link'
+import { formatNairobiTime } from '@/lib/dates'
 import type { MemberStatus, RehearsalStatus } from '@prisma/client'
 
 type Rehearsal = {
@@ -13,7 +14,7 @@ type Rehearsal = {
 
 type Member = {
   id: string; fullName: string; phone: string; joinedAt: Date; status: MemberStatus
-  rehearsals: { id: string; status: 'PRESENT' | 'ABSENT' | 'NO_RESPONSE'; markedBy: 'SELF' | 'COMMITTEE'; reason: string | null; reviewStatus: 'NONE' | 'PENDING' | 'EXCUSED' | 'UNEXCUSED' }[]
+  rehearsals: { id: string; status: 'PRESENT' | 'ABSENT' | 'NO_RESPONSE'; markedBy: 'SELF' | 'COMMITTEE'; checkedInAt: Date | null; reason: string | null; reviewStatus: 'NONE' | 'PENDING' | 'EXCUSED' | 'UNEXCUSED' }[]
 }
 
 export function AttendanceSheet({ rehearsal, members, totalMembers, page, pageCount }: { rehearsal: Rehearsal; members: Member[]; totalMembers: number; page: number; pageCount: number }) {
@@ -26,7 +27,7 @@ export function AttendanceSheet({ rehearsal, members, totalMembers, page, pageCo
     <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
       <table className="w-full min-w-[600px] text-left text-sm">
         <thead className="bg-stone-100">
-          <tr>{['Member', 'Phone', 'Attendance', 'Marked by', 'Review', ''].map((h) => <th className="p-3" key={h}>{h || ' '}</th>)}</tr>
+          <tr>{['Member', 'Phone', 'Attendance', 'Checked in', 'Marked by', 'Review', ''].map((h) => <th className="p-3" key={h}>{h || ' '}</th>)}</tr>
         </thead>
         <tbody>
           {members.map((m) => (
@@ -34,6 +35,7 @@ export function AttendanceSheet({ rehearsal, members, totalMembers, page, pageCo
               <td className="p-3">{m.fullName}{m.status !== 'ACTIVE' && <span className="block text-xs text-slate-500">Not currently active</span>}</td>
               <td className="p-3">{m.phone}</td>
               <td className="p-3">{m.rehearsals[0]?.status.replaceAll('_', ' ') ?? 'No response'}</td>
+              <td className="p-3">{m.rehearsals[0]?.checkedInAt ? formatNairobiTime(m.rehearsals[0].checkedInAt) : '—'}</td>
               <td className="p-3">{m.rehearsals[0]?.markedBy ?? '—'}</td>
               <td className="p-3">{m.rehearsals[0]?.reviewStatus.replace('_', ' ') ?? '—'}</td>
               <td className="p-3">
@@ -50,7 +52,7 @@ export function AttendanceSheet({ rehearsal, members, totalMembers, page, pageCo
               </td>
             </tr>
           ))}
-          {!members.length && <tr><td className="p-6" colSpan={6}>No active members or recorded attendance for this rehearsal.</td></tr>}
+          {!members.length && <tr><td className="p-6" colSpan={7}>No active members or recorded attendance for this rehearsal.</td></tr>}
         </tbody>
       </table>
     </div>

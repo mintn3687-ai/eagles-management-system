@@ -20,6 +20,7 @@ export default defineConfig({
     'tests/push-reminder-window.test.ts',
     'tests/push-service.test.ts',
     'tests/check-in-qr.test.ts',
+    'tests/rehearsal-check-in-time.test.ts',
     'tests/festivals.test.ts',
     'tests/festivals-service.test.ts',
     'tests/festivals-actions.test.ts',

@@ -40,7 +40,10 @@ describe('rehearsal attendance sheet members', () => {
           { rehearsals: { some: { rehearsalId: 'rehearsal-1' } } },
         ],
       },
-      select: expect.objectContaining({ status: true }),
+      select: expect.objectContaining({
+        status: true,
+        rehearsals: { where: { rehearsalId: 'rehearsal-1' }, select: expect.objectContaining({ checkedInAt: true }) },
+      }),
     }))
   })
 })

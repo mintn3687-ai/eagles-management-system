@@ -402,6 +402,7 @@ model Attendance {
   status         AttendanceStatus @default(NO_RESPONSE)
   markedBy       MarkedBy         @default(SELF)
   markedAt       DateTime         @default(now())
+  checkedInAt    DateTime?
   reason         String?
   reviewStatus   ReviewStatus     @default(NONE)
   reviewNote     String?

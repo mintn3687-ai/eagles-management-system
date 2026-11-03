@@ -97,7 +97,7 @@ export const adminRepository = {
     },
     select: {
       id: true, fullName: true, phone: true, joinedAt: true, status: true,
-      rehearsals: { where: { rehearsalId }, select: { id: true, status: true, markedBy: true, reason: true, reviewStatus: true } },
+      rehearsals: { where: { rehearsalId }, select: { id: true, status: true, markedBy: true, checkedInAt: true, reason: true, reviewStatus: true } },
     },
     orderBy: { fullName: 'asc' },
     skip,
