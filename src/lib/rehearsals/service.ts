@@ -166,19 +166,23 @@ export async function setManualAttendance(rehearsalIdInput: unknown, memberIdInp
     if (member.status !== 'ACTIVE') throw new RehearsalError('Only active members can have attendance marked.')
     const existing = await tx.attendance.findUnique({
       where: { rehearsalId_memberId: { rehearsalId, memberId } },
-      select: { id: true, status: true },
+      select: { id: true, status: true, checkedInAt: true },
     })
     if (existing?.status === 'NO_RESPONSE' && newStatus === 'PRESENT' && !note) throw new RehearsalError('A note is required when changing NO_RESPONSE to PRESENT.')
     const review = { reviewStatus: newStatus === 'PRESENT' ? 'NONE' as const : 'PENDING' as const, reviewNote: note || null, reviewedById: newStatus === 'PRESENT' && note ? actor.id : null, reviewedAt: newStatus === 'PRESENT' && note ? new Date() : null }
+    const markedAt = new Date()
+    const checkedInAt = newStatus === 'PRESENT'
+      ? existing?.status === 'PRESENT' ? existing.checkedInAt : markedAt
+      : null
     let attendanceId: string
     if (existing) {
       attendanceId = existing.id
       await tx.attendance.update({
         where: { id: existing.id },
-        data: { status: newStatus, markedBy: 'COMMITTEE', markedAt: new Date(), reason: null, ...review },
+        data: { status: newStatus, markedBy: 'COMMITTEE', markedAt, checkedInAt, reason: null, ...review },
       })
     } else {
-      const created = await tx.attendance.create({ data: { rehearsalId, memberId, status: newStatus, markedBy: 'COMMITTEE', ...review } })
+      const created = await tx.attendance.create({ data: { rehearsalId, memberId, status: newStatus, markedBy: 'COMMITTEE', markedAt, checkedInAt, ...review } })
       attendanceId = created.id
     }
     await tx.auditLog.create({ data: {
@@ -301,7 +305,8 @@ export async function markSelfPresent(rehearsalIdInput: unknown, code: unknown) 
       // Return instead of throwing: failed attempts must commit.
       return (existing?.wrongCodeTries ?? 0) + 1 === 5 ? 'Wrong code. You have used all 5 attempts.' : 'Wrong code. Check the projected number and try again.'
     }
-    const data = { status: 'PRESENT' as const, markedBy: 'SELF' as const, markedAt: new Date(), reason: null, reviewStatus: 'NONE' as const, reviewNote: null, reviewedById: null, reviewedAt: null }
+    const checkedInAt = new Date()
+    const data = { status: 'PRESENT' as const, markedBy: 'SELF' as const, markedAt: checkedInAt, checkedInAt, reason: null, reviewStatus: 'NONE' as const, reviewNote: null, reviewedById: null, reviewedAt: null }
     await tx.attendance.upsert({ where, create: { rehearsalId, memberId, ...data }, update: data })
     return null
   })
