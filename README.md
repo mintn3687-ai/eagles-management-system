@@ -1,4 +1,4 @@
-# Eagles Drama Club Register
+# eagles-management-system
 
 Mobile-first web app for managing drama club members, attendance, and payments in Kenya.
 
