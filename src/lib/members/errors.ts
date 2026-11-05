@@ -18,11 +18,9 @@ export function logUnexpectedMemberError(operation: string, error: unknown) {
     if (typeof target === 'string') details.target = target
     else if (Array.isArray(target)) details.target = target.map(String).join(', ')
   } else if (error instanceof Error) {
-    details.message = error.message
-      .replace(/(?:postgres(?:ql)?:\/\/)[^\s"'`]+/gi, '[redacted database URL]')
-      .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted email]')
-      .replace(/\b(?:\+?254|0)[17]\d{8}\b/g, '[redacted phone]')
-      .slice(0, 400)
+    details.message = error instanceof Prisma.PrismaClientUnknownRequestError
+      ? 'Database rejected the operation; detailed error omitted to avoid logging submitted member data.'
+      : error.name
   }
   console.error('Unexpected member action failure', details)
 }

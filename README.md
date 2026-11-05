@@ -117,6 +117,8 @@ Apply the `202610230004_model_timestamps` migration with `npm run db:migrate`.
 
 Read [docs/seasons.md](./docs/seasons.md) for the model, rollover rules, and manual verification steps.
 
+The `20261105210500_allow_kenyan_01_phones` migration updates member and emergency-contact phone constraints to accept normalized Kenyan `01` and `07` mobile numbers. Apply it with `npm run db:migrate` before deploying the corresponding member form changes.
+
 ## Phase 2: Meetings and Governance
 
 - Committee and Super Admin can manage meetings, agenda items, attendance, quorum, minutes, motions, and action items at `/admin/meetings`.
