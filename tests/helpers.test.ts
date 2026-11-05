@@ -5,10 +5,12 @@ import { formatKES } from '../src/lib/money'
 import { nairobiDateKey, nairobiMonthBounds, parseNairobiDate } from '../src/lib/dates'
 import { parseCsv, previewCsv, csvCell } from '../src/lib/members/csv'
 
-test('phone normalization accepts only the requested Kenyan 07 format', () => {
+test('phone normalization accepts Kenyan 01 and 07 mobile formats', () => {
   for (const value of ['0712345678', '+254 712 345 678', '254712345678']) assert.equal(normalizeKenyanPhone(value), '254712345678')
-  for (const value of ['254112345678', '07123456789', 'abc0712345678', '447123456789', '++254712345678']) assert.equal(normalizeKenyanPhone(value), null)
+  for (const value of ['0140246624', '+254 140 246 624', '254140246624']) assert.equal(normalizeKenyanPhone(value), '254140246624')
+  for (const value of ['254212345678', '07123456789', 'abc0712345678', '447123456789', '++254712345678']) assert.equal(normalizeKenyanPhone(value), null)
   assert.equal(phoneSchema.parse('(0712) 345-678'), '254712345678')
+  assert.equal(phoneSchema.parse('0140246624'), '254140246624')
 })
 test('KES helpers reject fractions, negative amounts and database integer overflow', () => {
   assert.equal(formatKES(1500), 'KES 1,500')

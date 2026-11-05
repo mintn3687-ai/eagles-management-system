@@ -133,7 +133,10 @@ describe('analytics and fee versions', () => {
 })
 
 describe('phone normalization', () => {
-  it.each([['0712 345 678', '254712345678'], ['+254 (712) 345-678', '254712345678'], ['254712345678', '254712345678']])(
+  it.each([
+    ['0712 345 678', '254712345678'], ['+254 (712) 345-678', '254712345678'], ['254712345678', '254712345678'],
+    ['0140246624', '254140246624'], ['+254 (140) 246-624', '254140246624'], ['254140246624', '254140246624'],
+  ])(
     'normalizes %s', (source, expected) => expect(normalizeKenyanPhone(source)).toBe(expected),
   )
   it('rejects invalid and non-Kenyan numbers', () => expect(normalizeKenyanPhone('071234')).toBeNull())

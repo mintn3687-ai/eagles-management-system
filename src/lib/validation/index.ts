@@ -7,7 +7,7 @@ export const passwordSchema = z.string().min(12, 'Use at least 12 characters.')
 export const phoneSchema = z.string().max(32).transform((value, ctx) => {
   const phone = normalizeKenyanPhone(value)
   if (!phone) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Use a Kenyan mobile number such as 0712345678.' })
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Use a Kenyan mobile number such as 0712345678 or 0101234567.' })
     return z.NEVER
   }
   return phone
