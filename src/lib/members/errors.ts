@@ -3,6 +3,30 @@ import { ZodError } from 'zod'
 import { AccessError } from '../permissions'
 
 export class MemberError extends Error {}
+
+export function logUnexpectedMemberError(operation: string, error: unknown) {
+  if (error instanceof MemberError || error instanceof AccessError || error instanceof ZodError) return
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') return
+
+  const details: Record<string, string> = {
+    operation,
+    name: error instanceof Error ? error.name : typeof error,
+  }
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    details.code = error.code
+    const target = error.meta?.target
+    if (typeof target === 'string') details.target = target
+    else if (Array.isArray(target)) details.target = target.map(String).join(', ')
+  } else if (error instanceof Error) {
+    details.message = error.message
+      .replace(/(?:postgres(?:ql)?:\/\/)[^\s"'`]+/gi, '[redacted database URL]')
+      .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted email]')
+      .replace(/\b(?:\+?254|0)[17]\d{8}\b/g, '[redacted phone]')
+      .slice(0, 400)
+  }
+  console.error('Unexpected member action failure', details)
+}
+
 export function memberErrorMessage(error: unknown): string {
   if (error instanceof MemberError || error instanceof AccessError) return error.message
   if (error instanceof ZodError) return error.issues[0].message

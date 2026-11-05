@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createInvite } from '@/lib/auth/create-invite'
-import { memberErrorMessage } from '@/lib/members/errors'
+import { logUnexpectedMemberError, memberErrorMessage } from '@/lib/members/errors'
 import { CSV_MAX_BYTES, CsvError, type CsvPreviewRow } from '@/lib/members/csv'
 import { requirePermission } from '@/lib/permissions'
 import { userIdSchema } from '@/lib/validation'
@@ -32,7 +32,10 @@ export async function createMemberAction(_state: MemberFormState, form: FormData
     const result = await createMember(parsed.data, actor.id)
     revalidatePath('/admin/members')
     return { ...result, success: true }
-  } catch (error) { return { error: memberErrorMessage(error) } }
+  } catch (error) {
+    logUnexpectedMemberError('create', error)
+    return { error: memberErrorMessage(error) }
+  }
 }
 
 export async function editMemberAction(_state: MemberFormState, form: FormData): Promise<MemberFormState> {
@@ -44,7 +47,10 @@ export async function editMemberAction(_state: MemberFormState, form: FormData):
     await editMember(id.data, parsed.data, actor.id)
     revalidatePath('/admin/members', 'layout')
     return { success: true }
-  } catch (error) { return { error: memberErrorMessage(error) } }
+  } catch (error) {
+    logUnexpectedMemberError('edit', error)
+    return { error: memberErrorMessage(error) }
+  }
 }
 
 export async function statusAction(_state: MemberFormState, form: FormData): Promise<MemberFormState> {
