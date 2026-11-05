@@ -6,6 +6,12 @@ const mocks = vi.hoisted(() => ({
   effectiveFee: vi.fn(),
   latestSuccessfulSubscription: vi.fn(),
   hasPendingMemberPayment: vi.fn(),
+  hasPendingEventPayment: vi.fn(),
+  hasSuccessfulEventPayment: vi.fn(),
+  openPaymentEventForCheckout: vi.fn(),
+  createPaymentEvent: vi.fn(),
+  paymentEventForUpdate: vi.fn(),
+  updatePaymentEventStatus: vi.fn(),
   findPaymentByReference: vi.fn(),
   findPaymentRequest: vi.fn(),
   createPaymentRequest: vi.fn(),
@@ -60,6 +66,12 @@ vi.mock('../src/modules/finance/repository', () => ({
     effectiveFee: mocks.effectiveFee,
     latestSuccessfulSubscription: mocks.latestSuccessfulSubscription,
     hasPendingMemberPayment: mocks.hasPendingMemberPayment,
+    hasPendingEventPayment: mocks.hasPendingEventPayment,
+    hasSuccessfulEventPayment: mocks.hasSuccessfulEventPayment,
+    openPaymentEventForCheckout: mocks.openPaymentEventForCheckout,
+    createPaymentEvent: mocks.createPaymentEvent,
+    paymentEventForUpdate: mocks.paymentEventForUpdate,
+    updatePaymentEventStatus: mocks.updatePaymentEventStatus,
     findPaymentByReference: mocks.findPaymentByReference,
     findPaymentRequest: mocks.findPaymentRequest,
     createPaymentRequest: mocks.createPaymentRequest,
@@ -80,10 +92,16 @@ vi.mock('../src/modules/finance/repository', () => ({
   },
 }))
 
-import { feeSettingInputSchema, memberPaymentRequestSchema, paymentListSchema } from '../src/lib/validation/fees'
+import {
+  feeSettingInputSchema,
+  memberPaymentRequestSchema,
+  paymentEventCreateSchema,
+  paymentListSchema,
+} from '../src/lib/validation/fees'
 import { paymentWhere } from '../src/lib/payments-query'
 import {
   initiatePayHeroMemberPayment,
+  initiatePayHeroEventPayment,
   processPayHeroCallback,
   recordManualPayment,
   reviewMemberPayment,
@@ -104,6 +122,11 @@ describe('member payment claims', () => {
     mocks.effectiveFee.mockResolvedValue({ amount: 750, billingPeriod: 'MONTHLY' })
     mocks.latestSuccessfulSubscription.mockResolvedValue(null)
     mocks.hasPendingMemberPayment.mockResolvedValue(null)
+    mocks.hasPendingEventPayment.mockResolvedValue(null)
+    mocks.hasSuccessfulEventPayment.mockResolvedValue(null)
+    mocks.openPaymentEventForCheckout.mockResolvedValue({
+      id: 'c456789012345678901234567', title: 'Drama Festival Trip', amount: 1800,
+    })
     mocks.findPaymentByReference.mockResolvedValue(null)
     mocks.findPaymentRequest.mockResolvedValue(null)
     mocks.createPaymentRequest.mockResolvedValue({ id: paymentId, status: 'PENDING' })
@@ -212,6 +235,63 @@ describe('member payment claims', () => {
     expect(mocks.initiatePayHeroCheckout).not.toHaveBeenCalled()
   })
 
+  it('creates a separate server-priced event checkout for an eligible member', async () => {
+    const eventId = 'c456789012345678901234567'
+    await expect(initiatePayHeroEventPayment({
+      memberId, eventId, phone: '0712345678',
+    }, actorId)).resolves.toEqual({ paymentId, duplicate: false })
+    expect(mocks.lockRow).toHaveBeenCalledWith(tx, 'PaymentEvent', eventId)
+    expect(mocks.createPaymentRequest).toHaveBeenCalledWith(tx, expect.objectContaining({
+      memberId, paymentEventId: eventId, type: 'EVENT', amount: 1800,
+      method: 'MPESA', status: 'PENDING', source: 'PAYHERO_CHECKOUT',
+    }))
+    expect(mocks.initiatePayHeroCheckout).toHaveBeenCalledWith(expect.objectContaining({
+      amount: 1800, phone: '0712345678', customerName: 'Test Member',
+    }))
+  })
+
+  it('prevents duplicate and closed event checkouts', async () => {
+    mocks.hasPendingEventPayment.mockResolvedValue({ id: paymentId })
+    await expect(initiatePayHeroEventPayment({
+      memberId, eventId: 'c456789012345678901234567', phone: '0712345678',
+    }, actorId)).resolves.toEqual({ paymentId, duplicate: true })
+    expect(mocks.initiatePayHeroCheckout).not.toHaveBeenCalled()
+
+    mocks.hasPendingEventPayment.mockResolvedValue(null)
+    mocks.openPaymentEventForCheckout.mockResolvedValue(null)
+    await expect(initiatePayHeroEventPayment({
+      memberId, eventId: 'c456789012345678901234567', phone: '0712345678',
+    }, actorId)).rejects.toThrow(/closed or its payment deadline has passed/)
+    expect(mocks.createPaymentRequest).not.toHaveBeenCalled()
+  })
+
+  it('does not create another checkout after an event payment succeeded', async () => {
+    mocks.hasSuccessfulEventPayment.mockResolvedValue({ id: paymentId })
+    await expect(initiatePayHeroEventPayment({
+      memberId, eventId: 'c456789012345678901234567', phone: '0712345678',
+    }, actorId)).rejects.toThrow(/already paid for this event/)
+    expect(mocks.createPaymentRequest).not.toHaveBeenCalled()
+  })
+
+  it('does not assign a confirmed event payment to member season fees', async () => {
+    mocks.findPayHeroPayment.mockResolvedValue({
+      id: paymentId, memberId, type: 'EVENT', amount: 1800, phone: '0712345678',
+      reference: 'EDC-EVT-123', status: 'PENDING', source: 'PAYHERO_CHECKOUT',
+      recordedById: actorId, paymentEventId: 'c456789012345678901234567',
+    })
+    mocks.getPayHeroTransactionStatus.mockResolvedValue({
+      reference: 'EDC-EVT-123', status: 'SUCCESS', amount: 1800,
+      receipt: 'EVENT123', description: 'Success',
+    })
+    await expect(processPayHeroCallback('EDC-EVT-123')).resolves.toMatchObject({
+      paymentId, status: 'SUCCESS', duplicate: false,
+    })
+    expect(mocks.findSeasonAt).not.toHaveBeenCalled()
+    expect(mocks.updatePaymentReview).toHaveBeenCalledWith(tx, paymentId, expect.objectContaining({
+      status: 'SUCCESS', source: 'PROVIDER_VERIFIED', mpesaReceipt: 'EVENT123',
+    }))
+  })
+
   it('settles only provider-confirmed payments and stores the provider receipt', async () => {
     await expect(processPayHeroCallback('EDC-123')).resolves.toMatchObject({
       paymentId, status: 'SUCCESS', duplicate: false,
@@ -275,6 +355,21 @@ describe('member payment claims', () => {
     }).success).toBe(false)
   })
 
+  it('validates event payment names, descriptions, amounts, and optional deadlines', () => {
+    expect(paymentEventCreateSchema.safeParse({
+      title: 'Drama Festival Trip',
+      description: 'Transport and entry fees for the festival.',
+      amount: 1800,
+      paymentDeadline: '',
+    }).success).toBe(true)
+    expect(paymentEventCreateSchema.safeParse({
+      title: 'Trip',
+      description: 'Festival',
+      amount: 0,
+      paymentDeadline: '',
+    }).success).toBe(false)
+  })
+
   it('reviews member claims once and does not treat the browser claim itself as success', async () => {
     await expect(reviewMemberPayment({
       paymentId, decision: 'FAILED', reason: 'Reference could not be matched.',
@@ -334,9 +429,9 @@ describe('member payment claims', () => {
     expect(mocks.updatePaymentReview).not.toHaveBeenCalled()
   })
 
-  it('supports retreat/bonding dashboard filters', () => {
-    const parsed = paymentListSchema.safeParse({ type: 'RETREAT_BONDING', status: 'PENDING' })
+  it.each(['RETREAT_BONDING', 'EVENT'] as const)('supports %s dashboard filters', (type) => {
+    const parsed = paymentListSchema.safeParse({ type, status: 'PENDING' })
     expect(parsed.success).toBe(true)
-    if (parsed.success) expect(paymentWhere(parsed.data)).toEqual({ type: 'RETREAT_BONDING', status: 'PENDING' })
+    if (parsed.success) expect(paymentWhere(parsed.data)).toEqual({ type, status: 'PENDING' })
   })
 })

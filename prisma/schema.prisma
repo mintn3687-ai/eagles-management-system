@@ -64,6 +64,12 @@ enum PaymentType {
   REGISTRATION
   SUBSCRIPTION
   RETREAT_BONDING
+  EVENT
+}
+
+enum PaymentEventStatus {
+  OPEN
+  CLOSED
 }
 
 enum PaymentSource {
@@ -281,6 +287,7 @@ model User {
   reviewedAttendances     Attendance[]          @relation("reviewedBy")
   createdFeeSettings      FeeSetting[]          @relation("createdBy")
   createdPayments         Payment[]             @relation("recordedBy")
+  createdPaymentEvents    PaymentEvent[]        @relation("paymentEventCreator")
   auditLogs               AuditLog[]            @relation("actor")
   invites                 Invite[]              @relation("userInvites")
   createdMeetings         Meeting[]             @relation("meetingCreator")
@@ -452,6 +459,7 @@ model Payment {
   id                String        @id @default(cuid())
   memberId          String
   seasonId          String?
+  paymentEventId    String?
   type              PaymentType
   amount            Int // KES in whole shillings
   status            PaymentStatus @default(PENDING)
@@ -473,6 +481,7 @@ model Payment {
   // Relationships
   member              Member               @relation("paymentsMember", fields: [memberId], references: [id])
   season              Season?              @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+  paymentEvent        PaymentEvent?        @relation(fields: [paymentEventId], references: [id], onDelete: Restrict)
   recordedBy          User                 @relation("recordedBy", fields: [recordedById], references: [id])
   reconciliationEntry ReconciliationEntry?
 
@@ -480,6 +489,23 @@ model Payment {
   @@index([type, status, memberId, paidAt(sort: Desc), id(sort: Desc)])
   @@index([seasonId, status, type, paidAt])
   @@index([memberId, source, status, createdAt(sort: Desc)])
+  @@index([paymentEventId, status, memberId])
+}
+
+model PaymentEvent {
+  id              String             @id @default(cuid())
+  title           String
+  description     String
+  amount          Int
+  paymentDeadline DateTime?           @db.Timestamp(3)
+  status          PaymentEventStatus @default(OPEN)
+  createdById     String
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  createdBy       User               @relation("paymentEventCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  payments        Payment[]
+
+  @@index([status, paymentDeadline, createdAt])
 }
 
 model Season {

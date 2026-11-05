@@ -17,6 +17,44 @@ export const financeRepository = {
   }),
   hasPendingMemberPayment: (tx: Transaction, memberId: string, type: 'REGISTRATION' | 'SUBSCRIPTION' | 'RETREAT_BONDING') =>
     tx.payment.findFirst({ where: { memberId, type, status: 'PENDING' }, select: { id: true } }),
+  hasPendingEventPayment: (tx: Transaction, memberId: string, paymentEventId: string) =>
+    tx.payment.findFirst({
+      where: { memberId, paymentEventId, type: 'EVENT', status: 'PENDING' },
+      select: { id: true },
+    }),
+  hasSuccessfulEventPayment: (tx: Transaction, memberId: string, paymentEventId: string) =>
+    tx.payment.findFirst({
+      where: { memberId, paymentEventId, type: 'EVENT', status: 'SUCCESS' },
+      select: { id: true },
+    }),
+  openPaymentEvents: (at: Date) => prisma.paymentEvent.findMany({
+    where: { status: 'OPEN', OR: [{ paymentDeadline: null }, { paymentDeadline: { gte: at } }] },
+    orderBy: [{ paymentDeadline: 'asc' }, { createdAt: 'desc' }, { id: 'desc' }],
+    select: { id: true, title: true, description: true, amount: true, paymentDeadline: true },
+  }),
+  paymentEventsForAdmin: () => prisma.paymentEvent.findMany({
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: 100,
+    select: { id: true, title: true, description: true, amount: true, paymentDeadline: true, status: true, createdAt: true },
+  }),
+  paymentEventPaymentsByStatus: () => prisma.payment.groupBy({
+    by: ['paymentEventId', 'status'],
+    where: { type: 'EVENT', paymentEventId: { not: null } },
+    _count: { _all: true },
+    _sum: { amount: true },
+  }),
+  paymentEventForUpdate: (tx: Transaction, id: string) => tx.paymentEvent.findUnique({
+    where: { id },
+    select: { id: true, status: true, paymentDeadline: true },
+  }),
+  createPaymentEvent: (tx: Transaction, input: Prisma.PaymentEventUncheckedCreateInput) =>
+    tx.paymentEvent.create({ data: input }),
+  updatePaymentEventStatus: (tx: Transaction, id: string, status: 'OPEN' | 'CLOSED') =>
+    tx.paymentEvent.update({ where: { id }, data: { status } }),
+  openPaymentEventForCheckout: (tx: Transaction, id: string, at: Date) => tx.paymentEvent.findFirst({
+    where: { id, status: 'OPEN', OR: [{ paymentDeadline: null }, { paymentDeadline: { gte: at } }] },
+    select: { id: true, title: true, amount: true },
+  }),
   findPaymentByReference: (
     tx: Transaction,
     memberId: string,
@@ -49,7 +87,7 @@ export const financeRepository = {
     where: { reference, source: { in: ['PAYHERO_CHECKOUT', 'PROVIDER_VERIFIED'] } },
     select: {
       id: true, memberId: true, type: true, amount: true, phone: true, reference: true,
-      status: true, source: true, mpesaReceipt: true, recordedById: true,
+      status: true, source: true, mpesaReceipt: true, recordedById: true, paymentEventId: true,
     },
   }),
   updatePayHeroCheckout: (tx: Transaction, id: string, checkoutRequestId: string | null, resultDesc: string) =>
@@ -75,6 +113,7 @@ export const financeRepository = {
     select: {
       id: true, type: true, amount: true, status: true, method: true, source: true,
       reference: true, mpesaReceipt: true, resultDesc: true, createdAt: true, paidAt: true, periodStart: true, periodEnd: true,
+      paymentEventId: true, paymentEvent: { select: { title: true } },
     },
   }),
   saveSubscriptionBillingPeriod: (tx: Transaction, period: 'MONTHLY' | 'TERM' | 'YEAR') => tx.setting.upsert({

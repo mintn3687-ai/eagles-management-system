@@ -169,6 +169,84 @@ export async function createFeeSetting(input: {
   })
 }
 
+export async function createPaymentEvent(input: {
+  title: string
+  description: string
+  amount: number
+  paymentDeadline: string | null
+}, actorId: string) {
+  const paymentDeadline = input.paymentDeadline
+    ? parseNairobiDate(input.paymentDeadline, '23:59')
+    : null
+  if (paymentDeadline && paymentDeadline < new Date()) {
+    throw new FinanceServiceError('Payment deadline must be today or a future date.')
+  }
+  return financeRepository.transaction(async (tx) => {
+    const event = await financeRepository.createPaymentEvent(tx, {
+      title: input.title,
+      description: input.description,
+      amount: input.amount,
+      paymentDeadline,
+      status: 'OPEN',
+      createdById: actorId,
+    })
+    await writeAuditLog(tx, {
+      actorId,
+      action: 'PAYMENT_EVENT_CREATED',
+      entity: 'PaymentEvent',
+      entityId: event.id,
+      details: { title: input.title, amount: input.amount, paymentDeadline },
+    })
+    return { paymentEventId: event.id }
+  })
+}
+
+export async function setPaymentEventStatus(input: {
+  eventId: string
+  status: 'OPEN' | 'CLOSED'
+}, actorId: string) {
+  return financeRepository.transaction(async (tx) => {
+    await lockRow(tx, 'PaymentEvent', input.eventId)
+    const event = await financeRepository.paymentEventForUpdate(tx, input.eventId)
+    if (!event) throw new FinanceServiceError('Payment event was not found.')
+    if (input.status === 'OPEN' && event.paymentDeadline && event.paymentDeadline < new Date()) {
+      throw new FinanceServiceError('A payment event past its deadline cannot be reopened.')
+    }
+    if (event.status === input.status) return { status: input.status, changed: false }
+    await financeRepository.updatePaymentEventStatus(tx, input.eventId, input.status)
+    await writeAuditLog(tx, {
+      actorId,
+      action: input.status === 'OPEN' ? 'PAYMENT_EVENT_OPENED' : 'PAYMENT_EVENT_CLOSED',
+      entity: 'PaymentEvent',
+      entityId: input.eventId,
+      details: { from: event.status, to: input.status },
+    })
+    return { status: input.status, changed: true }
+  })
+}
+
+export async function listOpenPaymentEvents() {
+  return financeRepository.openPaymentEvents(new Date())
+}
+
+export async function listPaymentEventsForAdmin() {
+  const [events, rows] = await Promise.all([
+    financeRepository.paymentEventsForAdmin(),
+    financeRepository.paymentEventPaymentsByStatus(),
+  ])
+  const summaries = new Map<string, Record<string, { count: number; amount: number }>>()
+  for (const row of rows) {
+    if (!row.paymentEventId) continue
+    const summary = summaries.get(row.paymentEventId) ?? {}
+    summary[row.status] = { count: row._count._all, amount: row._sum.amount ?? 0 }
+    summaries.set(row.paymentEventId, summary)
+  }
+  return events.map((event) => ({
+    ...event,
+    totals: summaries.get(event.id) ?? {},
+  }))
+}
+
 export async function submitMemberPayment(input: {
   memberId: string
   type: 'REGISTRATION' | 'SUBSCRIPTION' | 'RETREAT_BONDING'
@@ -296,25 +374,107 @@ export async function initiatePayHeroMemberPayment(input: {
 
   if (checkout.duplicate) return { paymentId: checkout.paymentId, duplicate: true }
 
-  try {
-    const checkoutRequestId = await initiatePayHeroCheckout({
-      amount: checkout.amount,
+  await sendPayHeroCheckout({
+    paymentId: checkout.paymentId,
+    amount: checkout.amount,
+    phone,
+    reference,
+    customerName: checkout.memberName,
+  })
+  return { paymentId: checkout.paymentId, duplicate: false }
+}
+
+export async function initiatePayHeroEventPayment(input: {
+  memberId: string
+  eventId: string
+  phone: string
+}, actorId: string) {
+  if (!isPayHeroConfigured()) throw new FinanceServiceError('Online M-Pesa checkout is not configured. Please contact the committee.')
+  const phone = input.phone.trim()
+  const reference = `EDC-EVT-${randomUUID().replaceAll('-', '').toUpperCase()}`
+  const idempotencyKey = createHash('sha256').update(`PAYHERO-EVENT:${reference}`).digest('hex')
+
+  const checkout = await financeRepository.transaction(async (tx) => {
+    await lockRow(tx, 'Member', input.memberId)
+    await lockRow(tx, 'PaymentEvent', input.eventId)
+    const member = await financeRepository.memberForPayment(tx, input.memberId)
+    if (!member || !['ACTIVE', 'PENDING_REGISTRATION'].includes(member.status)) {
+      throw new FinanceServiceError('Your membership is not eligible for event payments.')
+    }
+    const event = await financeRepository.openPaymentEventForCheckout(tx, input.eventId, new Date())
+    if (!event) throw new FinanceServiceError('This event is closed or its payment deadline has passed.')
+    const [pending, paid] = await Promise.all([
+      financeRepository.hasPendingEventPayment(tx, member.id, event.id),
+      financeRepository.hasSuccessfulEventPayment(tx, member.id, event.id),
+    ])
+    if (paid) throw new FinanceServiceError('You have already paid for this event.')
+    if (pending) return { paymentId: pending.id, duplicate: true as const }
+
+    const payment = await financeRepository.createPaymentRequest(tx, {
+      memberId: member.id,
+      paymentEventId: event.id,
+      type: 'EVENT',
+      amount: event.amount,
+      status: 'PENDING',
+      method: 'MPESA',
       phone,
       reference,
-      customerName: checkout.memberName,
+      source: 'PAYHERO_CHECKOUT',
+      idempotencyKey,
+      recordedById: actorId,
+      resultDesc: `PayHero checkout for ${event.title} is being initiated.`,
+    })
+    await writeAuditLog(tx, {
+      actorId,
+      action: 'PAYMENT_EVENT_CHECKOUT_STARTED',
+      entity: 'Payment',
+      entityId: payment.id,
+      details: { memberId: member.id, paymentEventId: event.id, title: event.title, amount: event.amount, reference },
+    })
+    return {
+      paymentId: payment.id,
+      duplicate: false as const,
+      amount: event.amount,
+      memberName: member.fullName,
+    }
+  })
+
+  if (checkout.duplicate) return { paymentId: checkout.paymentId, duplicate: true }
+  await sendPayHeroCheckout({
+    paymentId: checkout.paymentId,
+    amount: checkout.amount,
+    phone,
+    reference,
+    customerName: checkout.memberName,
+  })
+  return { paymentId: checkout.paymentId, duplicate: false }
+}
+
+async function sendPayHeroCheckout(input: {
+  paymentId: string
+  amount: number
+  phone: string
+  reference: string
+  customerName: string
+}) {
+  try {
+    const checkoutRequestId = await initiatePayHeroCheckout({
+      amount: input.amount,
+      phone: input.phone,
+      reference: input.reference,
+      customerName: input.customerName,
     })
     await financeRepository.transaction((tx) => financeRepository.updatePayHeroCheckout(
       tx,
-      checkout.paymentId,
+      input.paymentId,
       checkoutRequestId,
       'M-Pesa prompt sent. Waiting for PayHero confirmation.',
     ))
-    return { paymentId: checkout.paymentId, duplicate: false }
   } catch (error) {
     if (error instanceof PayHeroError && error.rejected) {
       await financeRepository.transaction(async (tx) => {
-        await lockRow(tx, 'Payment', checkout.paymentId)
-        await financeRepository.failPendingPayHeroCheckout(tx, checkout.paymentId, {
+        await lockRow(tx, 'Payment', input.paymentId)
+        await financeRepository.failPendingPayHeroCheckout(tx, input.paymentId, {
           status: 'FAILED',
           resultDesc: 'PayHero rejected the checkout request.',
         })
@@ -366,7 +526,7 @@ export async function processPayHeroCallback(reference: string) {
         periodStart = range.start
         periodEnd = range.end
       }
-      if (payment.type !== 'RETREAT_BONDING') {
+      if (payment.type !== 'RETREAT_BONDING' && payment.type !== 'EVENT') {
         await recordSeasonPayment(tx, { paymentId: payment.id, memberId: payment.memberId, paidAt, amount: payment.amount })
       }
       if (payment.type === 'REGISTRATION' && member.status === 'PENDING_REGISTRATION') {
@@ -455,7 +615,7 @@ export async function reviewMemberPayment(input: {
         periodEnd = range.end
       }
 
-      if (payment.type !== 'RETREAT_BONDING') {
+      if (payment.type !== 'RETREAT_BONDING' && payment.type !== 'EVENT') {
         await recordSeasonPayment(tx, {
           paymentId: payment.id,
           memberId: payment.memberId,

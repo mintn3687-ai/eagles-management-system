@@ -48,6 +48,7 @@ export const adminExportRepository = {
         id: true, type: true, status: true, method: true, source: true, amount: true,
         paidAt: true, createdAt: true, reference: true, mpesaReceipt: true,
         member: { select: { fullName: true } },
+        paymentEvent: { select: { title: true } },
       },
     }),
 }

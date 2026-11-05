@@ -1,5 +1,5 @@
 import 'server-only'
-import { BillingPeriod, FeeType, MemberStatus, PaymentType } from '@prisma/client'
+import { BillingPeriod, FeeType, MemberStatus } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { nairobiDateKey, parseNairobiDate } from '@/lib/dates'
 
@@ -11,7 +11,7 @@ export function selectEffectiveFeeVersion<T extends { effectiveFrom: Date; id: s
     .sort((a, b) => b.effectiveFrom.getTime() - a.effectiveFrom.getTime() || b.id.localeCompare(a.id))[0] ?? null
 }
 
-export function resolveMemberFeeType(status: MemberStatus): PaymentType | null {
+export function resolveMemberFeeType(status: MemberStatus): FeeType | null {
   if (status === 'PENDING_REGISTRATION') return 'REGISTRATION'
   if (status === 'ACTIVE') return 'SUBSCRIPTION'
   return null

@@ -62,7 +62,10 @@ export const adminRepository = {
       orderBy: [{ paidAt: { sort: 'desc', nulls: 'last' } }, { id: 'desc' }],
       skip,
       take,
-      include: { member: { select: { fullName: true } } },
+      include: {
+        member: { select: { fullName: true } },
+        paymentEvent: { select: { title: true } },
+      },
     }),
     prisma.payment.count({ where }),
     prisma.payment.aggregate({ where: { ...where, type: 'REGISTRATION', status: 'SUCCESS' }, _sum: { amount: true } }),
@@ -77,7 +80,10 @@ export const adminRepository = {
   ]),
   paymentReceipt: (id: string) => prisma.payment.findUnique({
     where: { id },
-    include: { member: { select: { fullName: true, email: true } } },
+    include: {
+      member: { select: { fullName: true, email: true } },
+      paymentEvent: { select: { title: true, description: true } },
+    },
   }),
   analyticsMember: (id: string) => prisma.member.findUnique({
     where: { id },

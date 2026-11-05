@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { phoneSchema, userIdSchema } from '@/lib/validation'
 
 export const feeTypeSchema = z.enum(['REGISTRATION', 'SUBSCRIPTION', 'RETREAT_BONDING'] as const)
+export const paymentTypeSchema = z.enum(['REGISTRATION', 'SUBSCRIPTION', 'RETREAT_BONDING', 'EVENT'] as const)
 export const billingPeriodSchema = z.enum(['MONTHLY', 'TERM', 'YEAR'] as const)
 export const paymentStatusSchema = z.enum(['PENDING', 'SUCCESS', 'FAILED', 'CANCELLED'] as const)
 export const paymentMethodSchema = z.enum(['MPESA', 'CASH', 'OTHER'] as const)
@@ -48,6 +49,23 @@ export const payHeroCheckoutSchema = z.object({
   phone: phoneSchema,
 })
 
+export const paymentEventCreateSchema = z.object({
+  title: z.string().trim().min(3, 'Enter an event name.').max(120),
+  description: z.string().trim().min(3, 'Describe the event payment.').max(500),
+  amount: z.coerce.number().int().min(1, 'Enter an amount of at least KES 1.').max(1000000, 'Amount is too high.'),
+  paymentDeadline: z.union([dateKeySchema, z.literal('')]).optional().transform((value) => value || null),
+})
+
+export const paymentEventStatusSchema = z.object({
+  eventId: userIdSchema,
+  status: z.enum(['OPEN', 'CLOSED']),
+})
+
+export const payHeroEventCheckoutSchema = z.object({
+  eventId: userIdSchema,
+  phone: phoneSchema,
+})
+
 export const reviewMemberPaymentSchema = z.object({
   paymentId: userIdSchema,
   decision: z.enum(['SUCCESS', 'FAILED', 'CANCELLED']),
@@ -55,7 +73,7 @@ export const reviewMemberPaymentSchema = z.object({
 })
 
 export const paymentListSchema = z.object({
-  type: z.union([feeTypeSchema, z.literal('')]).default(''),
+  type: z.union([paymentTypeSchema, z.literal('')]).default(''),
   status: z.union([paymentStatusSchema, z.literal('')]).default(''),
   method: z.union([paymentMethodSchema, z.literal('')]).default(''),
   member: z.string().trim().max(80).default(''),

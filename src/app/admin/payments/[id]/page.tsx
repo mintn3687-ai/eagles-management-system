@@ -51,6 +51,11 @@ export default async function PaymentReceiptPage({ params }: { params: Promise<{
           <p className="text-sm text-slate-500">Fee type</p>
           <p>{payment.type}</p>
         </div>
+        {payment.paymentEvent && <div>
+          <p className="text-sm text-slate-500">Event</p>
+          <p className="font-semibold">{payment.paymentEvent.title}</p>
+          <p className="text-sm text-slate-600">{payment.paymentEvent.description}</p>
+        </div>}
         <div>
           <p className="text-sm text-slate-500">Amount</p>
           <p>{formatKES(payment.amount)}</p>

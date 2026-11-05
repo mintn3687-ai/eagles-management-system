@@ -6,8 +6,8 @@ import { formatKES } from '@/lib/money'
 import { pageUser } from '@/lib/page-access'
 import { getCurrentFee, getMemberSubscriptionStatus } from '@/lib/fees'
 import { isPayHeroConfigured } from '@/modules/finance/payhero-client'
-import { listMemberPaymentHistory } from '@/modules/finance/service'
-import { startPayHeroCheckoutAction, submitMemberPaymentAction } from './actions'
+import { listMemberPaymentHistory, listOpenPaymentEvents } from '@/modules/finance/service'
+import { startPayHeroCheckoutAction, startPayHeroEventCheckoutAction, submitMemberPaymentAction } from './actions'
 
 const paymentOptions = [
   { type: 'REGISTRATION', title: 'Registration fee', description: 'One-time fee for new members.' },
@@ -34,12 +34,13 @@ export default async function MemberFeesPage({
   const success = typeof params.success === 'string' ? params.success : ''
   const member = user.member
   const payHeroEnabled = isPayHeroConfigured()
-  const [registration, subscription, retreatBonding, history, subscriptionStatus] = await Promise.all([
+  const [registration, subscription, retreatBonding, history, subscriptionStatus, paymentEvents] = await Promise.all([
     getCurrentFee('REGISTRATION'),
     getCurrentFee('SUBSCRIPTION'),
     getCurrentFee('RETREAT_BONDING'),
     listMemberPaymentHistory(member.id),
     member.status === 'ACTIVE' ? getMemberSubscriptionStatus(member.id) : Promise.resolve(null),
+    listOpenPaymentEvents(),
   ])
   const fees = { REGISTRATION: registration, SUBSCRIPTION: subscription, RETREAT_BONDING: retreatBonding }
   const pendingPayments = new Map(history.filter((payment) => payment.status === 'PENDING').map((payment) => [payment.type, payment]))
@@ -137,6 +138,49 @@ export default async function MemberFeesPage({
       })}
     </section>
 
+    <section className="space-y-4" aria-label="Event payments">
+      <div>
+        <h2>Event payments</h2>
+        <p className="text-sm text-slate-600">Pay separate charges created by the committee, such as trips, performances, or activities.</p>
+      </div>
+      {paymentEvents.length ? <div className="grid gap-4 xl:grid-cols-2">
+        {paymentEvents.map((event) => {
+          const eventPayments = history.filter((payment) => payment.paymentEventId === event.id)
+          const successfulPayment = eventPayments.find((payment) => payment.status === 'SUCCESS')
+          const pendingPayment = eventPayments.find((payment) => payment.status === 'PENDING')
+          return <article className="card space-y-4" key={event.id}>
+            <div>
+              <h3>{event.title}</h3>
+              <p className="text-sm text-slate-600">{event.description}</p>
+            </div>
+            <p className="rounded-lg bg-stone-50 p-3 text-lg font-semibold">
+              {formatKES(event.amount)}{event.paymentDeadline ? ` · Due ${formatNairobiDate(event.paymentDeadline)}` : ''}
+            </p>
+            {successfulPayment && <p className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">
+              Payment confirmed{successfulPayment.mpesaReceipt ? ` · Receipt ${successfulPayment.mpesaReceipt}` : ''}.
+            </p>}
+            {pendingPayment && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+              {pendingPayment.source === 'PAYHERO_CHECKOUT'
+                ? 'Your M-Pesa prompt is pending. Approve it on your phone and wait for PayHero confirmation.'
+                : 'Your payment is awaiting verification.'}
+            </p>}
+            {!['ACTIVE', 'PENDING_REGISTRATION'].includes(member.status) && <p className="text-sm text-slate-600">Event payment is available to active or pending-registration members.</p>}
+            {!payHeroEnabled && <p className="text-sm text-slate-600">Online M-Pesa checkout is not enabled. Contact the committee for an approved payment option.</p>}
+            {!successfulPayment && !pendingPayment && payHeroEnabled && ['ACTIVE', 'PENDING_REGISTRATION'].includes(member.status) && (
+              <form action={startPayHeroEventCheckoutAction} className="space-y-3">
+                <input type="hidden" name="eventId" value={event.id} />
+                <div>
+                  <label className="label" htmlFor={`event-phone-${event.id}`}>M-Pesa phone number</label>
+                  <input className="input" id={`event-phone-${event.id}`} name="phone" type="tel" defaultValue={member.phone} autoComplete="tel" required />
+                </div>
+                <SubmitButton pendingText="Sending M-Pesa prompt…">Pay {formatKES(event.amount)} with M-Pesa</SubmitButton>
+              </form>
+            )}
+          </article>
+        })}
+      </div> : <p className="card text-slate-600">There are no open event payments right now.</p>}
+    </section>
+
     <section className="card">
       <h2>Your payment history</h2>
       {history.length ? <div className="overflow-x-auto">
@@ -146,7 +190,7 @@ export default async function MemberFeesPage({
           </tr></thead>
           <tbody>{history.map((payment) => <tr className="border-t border-slate-200" key={payment.id}>
             <td className="p-3">{formatNairobiDate(payment.paidAt ?? payment.createdAt)}</td>
-            <td className="p-3">{payment.type.replaceAll('_', ' ')}</td>
+            <td className="p-3">{payment.type === 'EVENT' ? `Event: ${payment.paymentEvent?.title ?? 'Event payment'}` : payment.type.replaceAll('_', ' ')}</td>
             <td className="p-3">{formatKES(payment.amount)}</td>
             <td className="p-3"><span className={`rounded-full px-2 py-1 text-xs font-semibold ${statusClass[payment.status]}`}>{payment.status}</span></td>
             <td className="p-3">{payment.method}</td>

@@ -64,7 +64,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     </section>
 
     <section className="card space-y-4"><div><h2>This month’s payments</h2><p className="text-sm text-slate-600">Successful payments for {currentNairobiMonth()} (Nairobi time).</p></div>
-      <div className="grid gap-3 sm:grid-cols-3">{(['REGISTRATION', 'SUBSCRIPTION', 'RETREAT_BONDING'] as const).map((type) => <article className="rounded-xl bg-stone-50 p-4" key={type}><h3>{type.replaceAll('_', ' ')}</h3><p className="mt-2 text-2xl font-semibold">{formatKES(dashboard.totals[type].amount)}</p><p className="text-sm text-slate-600">{dashboard.totals[type].count} successful {dashboard.totals[type].count === 1 ? 'payment' : 'payments'}</p></article>)}</div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{(['REGISTRATION', 'SUBSCRIPTION', 'RETREAT_BONDING', 'EVENT'] as const).map((type) => <article className="rounded-xl bg-stone-50 p-4" key={type}><h3>{type.replaceAll('_', ' ')}</h3><p className="mt-2 text-2xl font-semibold">{formatKES(dashboard.totals[type].amount)}</p><p className="text-sm text-slate-600">{dashboard.totals[type].count} successful {dashboard.totals[type].count === 1 ? 'payment' : 'payments'}</p></article>)}</div>
       <Link className="inline-flex min-h-11 items-center underline" href="/admin/payments">Open payment ledger</Link>
     </section>
 
