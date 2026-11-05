@@ -69,6 +69,7 @@ enum PaymentType {
 enum PaymentSource {
   ADMIN_MANUAL
   MEMBER_REPORTED
+  PAYHERO_CHECKOUT
   PROVIDER_VERIFIED
 }
 

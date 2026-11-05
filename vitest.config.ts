@@ -31,5 +31,6 @@ export default defineConfig({
     'tests/festival-proposal-route.test.ts',
     'tests/member-roster-pdf.test.ts',
     'tests/member-payments.test.ts',
+    'tests/payhero-client.test.ts',
   ] },
 })

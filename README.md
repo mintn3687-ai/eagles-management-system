@@ -90,7 +90,7 @@ commit environment files.
 - **Rehearsal**: Schedule management with check-in codes
 - **Attendance**: Present/absent tracking with committee review
 - **FeeSetting**: Configurable registration, subscription, and retreat/bonding fees
-- **Payment**: Audited manual payments and member-submitted payment references with committee verification
+- **Payment**: Audited manual payments, committee-reviewed references, and PayHero M-Pesa checkout with provider-verified callbacks
 - **Setting**: Club-wide configuration settings
 - **AuditLog**: Activity tracking
 

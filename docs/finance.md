@@ -27,7 +27,11 @@ Actions check central permissions and validate Zod input before calling finance 
 
 Statement matching is intentionally exact and refuses ambiguous duplicates. Unmatched rows remain visible in open batches and prevent completion. Ticket reconciliation uses the gross sale transaction; refunds are recorded separately and should be represented as separate statement transactions if imported in a future workflow.
 
-Live M-Pesa checkout is not configured. Members first pay through a club-approved channel and submit the receipt/transaction reference; this creates a pending `MEMBER_REPORTED` claim. Only a Committee or Super Admin can verify or reject it, and verification is audited. The server does not trust a client amount or mark the claim successful based on a browser response. No Daraja STK push or provider callbacks are implemented. Receipt and payment evidence are stored as references, not uploaded files.
+Members may pay registration, subscription, and retreat/bonding fees through PayHero M-Pesa STK checkout when `PAYHERO_ENABLED=true` and its server-only credentials, M-Pesa channel ID, and public HTTPS callback URL are configured. The amount is loaded from the server fee settings; the member can provide their Kenyan mobile number. PayHero callbacks are only a notification: the server fetches the transaction status directly from PayHero and checks the external reference, amount, and M-Pesa receipt before recording success. Duplicate submissions are serialized per member and duplicate callbacks are idempotent. Do not mark a payment successful based on a browser response.
+
+`PAYHERO_ACCOUNT_ID` is retained as a configuration reference but is not a substitute for the API's `PAYHERO_CHANNEL_ID`. Use the channel ID for the M-Pesa collection channel. `PAYHERO_BASIC_AUTH_TOKEN` can be a full `Basic ...` authorization value or the base64 token; otherwise the API username/password pair is used. Keep all PayHero credentials server-side, do not add `NEXT_PUBLIC_` prefixes, and configure the same values in the hosting provider's environment settings as the deployment that receives the callback. A local `localhost` callback cannot receive provider requests. Until PayHero has sent a real transaction callback and the payment is confirmed in the ledger, treat the integration as unverified. Cash and other member-reported payments continue to require committee review.
+
+The `20261105162700_payhero_checkout` migration adds a payment-source value for pending PayHero checkouts. Apply it with `npm run db:migrate` before deploying this version.
 
 ## Manual checks
 
@@ -40,13 +44,14 @@ Live M-Pesa checkout is not configured. Members first pay through a club-approve
 7. As an active member, submit a reimbursement at `/member/reimbursements`. As Committee, approve it and mark it paid. Verify member access shows only their own requests, and payment adds one expense entry.
 8. Download the CSV for all records, a season, a production, and a combined scope. Check spreadsheet formula-like references are escaped.
 9. Configure all three fee types at `/admin/fees`. As a pending member, submit a registration payment reference; as an active member, submit subscription and retreat/bonding claims. Verify claims remain pending and members can see only their own history.
-10. As Committee, verify a pending claim with a reason and check its source, status, audit record, receipt reference, and (for registration) member activation. Reject or cancel another claim and ensure it is not counted as successful income.
+10. As Committee, verify a pending member-reported claim with a reason and check its source, status, audit record, receipt reference, and (for registration) member activation. Reject or cancel another claim and ensure it is not counted as successful income.
+11. With PayHero configured in a test deployment, initiate an STK prompt for each eligible fee type. Confirm the ledger remains pending before provider confirmation, duplicate submissions do not create a second prompt, and only PayHero-verified amount/reference/receipt data settles a payment.
 
 ## Limitations
 
 - Reconciliation entries are typed manually; CSV statement upload/import and manual exception resolution are not included.
 - A production-scoped report excludes legacy member fee payments because the existing `Payment` model is season-linked but has no production relationship. Season reports include those member payments.
 - Reimbursement receipts and finance receipts are references only; no upload or document storage integration is included.
-- Retreat/bonding is a configurable club-wide fee type, not a retreat/event booking system. Member-submitted claims require offline committee verification until a real payment provider is integrated.
+- Retreat/bonding is a configurable club-wide fee type, not a retreat/event booking system. PayHero must be configured and tested in each deployment before presenting live checkout as available.
 - The existing migration history cannot currently be replayed into Prisma's clean shadow database: `20261022090436_production_entities` attempts to alter the `Ballot` table before the later elections migration creates it. Phase 5 was applied additively with `migrate deploy` to the existing development database; clean shadow replay should be repaired separately without rewriting applied migrations.
 - No legal, tax, or accounting-compliance claims are made; confirm applicable local requirements before using generated reports as statutory records.

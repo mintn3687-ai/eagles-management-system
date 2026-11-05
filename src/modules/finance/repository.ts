@@ -8,7 +8,7 @@ export const financeRepository = {
   transaction: <T>(work: (tx: Transaction) => Promise<T>) => prisma.$transaction(work),
   memberForPayment: (tx: Transaction, memberId: string) => tx.member.findUnique({
     where: { id: memberId },
-    select: { id: true, status: true },
+    select: { id: true, fullName: true, phone: true, status: true },
   }),
   latestSuccessfulSubscription: (tx: Transaction, memberId: string) => tx.payment.findFirst({
     where: { memberId, type: 'SUBSCRIPTION', status: 'SUCCESS' },
@@ -45,6 +45,23 @@ export const financeRepository = {
     select: { id: true, status: true },
   }),
   createPaymentRequest: (tx: Transaction, data: Prisma.PaymentUncheckedCreateInput) => tx.payment.create({ data }),
+  findPayHeroPayment: (tx: Transaction, reference: string) => tx.payment.findFirst({
+    where: { reference, source: { in: ['PAYHERO_CHECKOUT', 'PROVIDER_VERIFIED'] } },
+    select: {
+      id: true, memberId: true, type: true, amount: true, phone: true, reference: true,
+      status: true, source: true, mpesaReceipt: true, recordedById: true,
+    },
+  }),
+  updatePayHeroCheckout: (tx: Transaction, id: string, checkoutRequestId: string | null, resultDesc: string) =>
+    tx.payment.update({
+      where: { id },
+      data: { checkoutRequestId, resultDesc },
+    }),
+  failPendingPayHeroCheckout: (tx: Transaction, id: string, data: Prisma.PaymentUncheckedUpdateInput) =>
+    tx.payment.updateMany({
+      where: { id, source: 'PAYHERO_CHECKOUT', status: 'PENDING' },
+      data,
+    }),
   paymentForReview: (tx: Transaction, id: string) => tx.payment.findUnique({
     where: { id },
     select: { id: true, memberId: true, type: true, amount: true, method: true, reference: true, status: true, source: true },
@@ -57,7 +74,7 @@ export const financeRepository = {
     take: 100,
     select: {
       id: true, type: true, amount: true, status: true, method: true, source: true,
-      reference: true, resultDesc: true, createdAt: true, paidAt: true, periodStart: true, periodEnd: true,
+      reference: true, mpesaReceipt: true, resultDesc: true, createdAt: true, paidAt: true, periodStart: true, periodEnd: true,
     },
   }),
   saveSubscriptionBillingPeriod: (tx: Transaction, period: 'MONTHLY' | 'TERM' | 'YEAR') => tx.setting.upsert({

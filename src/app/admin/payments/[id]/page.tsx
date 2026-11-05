@@ -61,11 +61,11 @@ export default async function PaymentReceiptPage({ params }: { params: Promise<{
         </div>
         <div>
           <p className="text-sm text-slate-500">Reference</p>
-          <p>{payment.reference ?? '—'}</p>
+          <p>{payment.mpesaReceipt ?? payment.reference ?? '—'}</p>
         </div>
         <div>
           <p className="text-sm text-slate-500">Payment source</p>
-          <p>{payment.source === 'MEMBER_REPORTED' ? 'Member reported; committee reviewed' : payment.source === 'PROVIDER_VERIFIED' ? 'Provider verified' : 'Admin recorded'}</p>
+          <p>{payment.source === 'MEMBER_REPORTED' ? 'Member reported; committee reviewed' : payment.source === 'PAYHERO_CHECKOUT' ? 'PayHero checkout' : payment.source === 'PROVIDER_VERIFIED' ? 'Provider verified' : 'Admin recorded'}</p>
         </div>
       </div>
 

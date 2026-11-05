@@ -3,8 +3,8 @@
 import { redirect } from 'next/navigation'
 import { consumeRateLimit } from '@/lib/rate-limit'
 import { requireRole } from '@/lib/permissions'
-import { memberPaymentRequestSchema } from '@/lib/validation/fees'
-import { FinanceServiceError, submitMemberPayment } from '@/modules/finance/service'
+import { memberPaymentRequestSchema, payHeroCheckoutSchema } from '@/lib/validation/fees'
+import { FinanceServiceError, initiatePayHeroMemberPayment, submitMemberPayment } from '@/modules/finance/service'
 
 function value(formData: FormData, key: string) {
   const field = formData.get(key)
@@ -31,21 +31,60 @@ export async function submitMemberPaymentAction(formData: FormData) {
     redirect(`/member/fees?error=${encodeURIComponent('Too many payment submissions. Please wait before trying again.')}`)
   }
 
+  let result: Awaited<ReturnType<typeof submitMemberPayment>>
   try {
-    const result = await submitMemberPayment({
+    result = await submitMemberPayment({
       memberId: actor.member.id,
       type: parsed.data.type,
       method: parsed.data.method,
       reference: parsed.data.reference,
     }, actor.id)
-    const message = result.duplicate
-      ? 'This payment reference was already submitted. Check the payment history below.'
-      : 'Payment reported. It will remain pending until the committee verifies it.'
-    redirect(`/member/fees?success=${encodeURIComponent(message)}`)
   } catch (error) {
     const message = error instanceof FinanceServiceError
       ? error.message
       : 'Could not submit the payment for review. Please try again.'
     redirect(`/member/fees?error=${encodeURIComponent(message)}`)
   }
+  const message = result.duplicate
+    ? 'This payment reference was already submitted. Check the payment history below.'
+    : 'Payment reported. It will remain pending until the committee verifies it.'
+  redirect(`/member/fees?success=${encodeURIComponent(message)}`)
+}
+
+export async function startPayHeroCheckoutAction(formData: FormData) {
+  const actor = await requireRole('MEMBER')
+  if (!actor.member) redirect('/forbidden')
+
+  const parsed = payHeroCheckoutSchema.safeParse({
+    type: value(formData, 'type'),
+    phone: value(formData, 'phone'),
+  })
+  if (!parsed.success) {
+    const message = parsed.error.issues[0]?.message ?? 'Check the phone number and try again.'
+    redirect(`/member/fees?error=${encodeURIComponent(message)}`)
+  }
+
+  const rateLimit = await consumeRateLimit('member-payhero-checkout', actor.member.id, 3, 60 * 60_000)
+  if (!rateLimit.allowed) {
+    redirect(`/member/fees?error=${encodeURIComponent('Too many M-Pesa prompts. Please wait before trying again.')}`)
+  }
+
+  let result: Awaited<ReturnType<typeof initiatePayHeroMemberPayment>>
+  try {
+    result = await initiatePayHeroMemberPayment({
+      memberId: actor.member.id,
+      type: parsed.data.type,
+      phone: parsed.data.phone,
+    }, actor.id)
+  } catch (error) {
+    if (error instanceof FinanceServiceError) {
+      redirect(`/member/fees?error=${encodeURIComponent(error.message)}`)
+    }
+    console.error('Could not start PayHero checkout.', error)
+    redirect(`/member/fees?error=${encodeURIComponent('Could not confirm the M-Pesa prompt. Check payment history before retrying.')}`)
+  }
+  const message = result.duplicate
+    ? 'A payment for this fee is already pending. Check your payment history before retrying.'
+    : 'M-Pesa prompt sent. Approve it on your phone; the payment will show as successful only after PayHero confirms it.'
+  redirect(`/member/fees?success=${encodeURIComponent(message)}`)
 }

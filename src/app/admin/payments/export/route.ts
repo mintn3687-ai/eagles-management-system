@@ -4,7 +4,7 @@ import { requireRole } from '@/lib/permissions'
 import { paymentListSchema } from '@/lib/validation/fees'
 import { adminExportRepository } from '@/modules/admin/export-repository'
 
-const columns = ['Receipt number', 'Member', 'Type', 'Status', 'Method', 'Source', 'Amount (KES)', 'Date', 'Reference']
+const columns = ['Receipt number', 'Member', 'Type', 'Status', 'Method', 'Source', 'Amount (KES)', 'Date', 'Reference', 'M-Pesa receipt']
 const encoder = new TextEncoder()
 
 function csvCell(value: string | number) {
@@ -39,6 +39,7 @@ export async function GET(request: Request) {
               payment.amount,
               formatNairobiDate(payment.paidAt ?? payment.createdAt),
               payment.reference ?? '',
+              payment.mpesaReceipt ?? '',
             ]
             controller.enqueue(encoder.encode(`${row.map(csvCell).join(',')}\r\n`))
           }

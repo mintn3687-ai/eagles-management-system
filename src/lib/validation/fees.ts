@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { userIdSchema } from '@/lib/validation'
+import { phoneSchema, userIdSchema } from '@/lib/validation'
 
 export const feeTypeSchema = z.enum(['REGISTRATION', 'SUBSCRIPTION', 'RETREAT_BONDING'] as const)
 export const billingPeriodSchema = z.enum(['MONTHLY', 'TERM', 'YEAR'] as const)
@@ -41,6 +41,11 @@ export const memberPaymentRequestSchema = z.object({
   method: paymentMethodSchema,
   reference: z.string().trim().min(3, 'Enter the payment reference from your receipt.').max(120),
   confirmPaid: z.literal('on', { message: 'Confirm that you have already made this payment.' }),
+})
+
+export const payHeroCheckoutSchema = z.object({
+  type: feeTypeSchema,
+  phone: phoneSchema,
 })
 
 export const reviewMemberPaymentSchema = z.object({

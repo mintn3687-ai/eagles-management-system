@@ -19,7 +19,7 @@ export async function requireUser() {
   if (!session?.user?.id) throw new AccessError(401, 'LOGIN')
   const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: {
     id: true, name: true, email: true, role: true, isActive: true, consentAcceptedAt: true, passwordHash: true,
-    member: { select: { id: true, fullName: true, status: true } },
+    member: { select: { id: true, fullName: true, phone: true, status: true } },
   } })
   if (!user?.isActive) throw new AccessError(401, 'LOGIN')
   if (!user.passwordHash || passwordVersion(user.passwordHash) !== session.user.passwordVersion) throw new AccessError(401, 'LOGIN')

@@ -5,8 +5,9 @@ import { formatNairobiDate } from '@/lib/dates'
 import { formatKES } from '@/lib/money'
 import { pageUser } from '@/lib/page-access'
 import { getCurrentFee, getMemberSubscriptionStatus } from '@/lib/fees'
+import { isPayHeroConfigured } from '@/modules/finance/payhero-client'
 import { listMemberPaymentHistory } from '@/modules/finance/service'
-import { submitMemberPaymentAction } from './actions'
+import { startPayHeroCheckoutAction, submitMemberPaymentAction } from './actions'
 
 const paymentOptions = [
   { type: 'REGISTRATION', title: 'Registration fee', description: 'One-time fee for new members.' },
@@ -32,6 +33,7 @@ export default async function MemberFeesPage({
   const error = typeof params.error === 'string' ? params.error : ''
   const success = typeof params.success === 'string' ? params.success : ''
   const member = user.member
+  const payHeroEnabled = isPayHeroConfigured()
   const [registration, subscription, retreatBonding, history, subscriptionStatus] = await Promise.all([
     getCurrentFee('REGISTRATION'),
     getCurrentFee('SUBSCRIPTION'),
@@ -40,7 +42,7 @@ export default async function MemberFeesPage({
     member.status === 'ACTIVE' ? getMemberSubscriptionStatus(member.id) : Promise.resolve(null),
   ])
   const fees = { REGISTRATION: registration, SUBSCRIPTION: subscription, RETREAT_BONDING: retreatBonding }
-  const pendingTypes = new Set(history.filter((payment) => payment.status === 'PENDING').map((payment) => payment.type))
+  const pendingPayments = new Map(history.filter((payment) => payment.status === 'PENDING').map((payment) => [payment.type, payment]))
   const latestSubscription = history.find((payment) => payment.type === 'SUBSCRIPTION' && payment.status === 'SUCCESS')
 
   return <div className="space-y-6">
@@ -55,7 +57,9 @@ export default async function MemberFeesPage({
     {success && <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900" role="status">{success}</p>}
 
     <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
-      This system does not initiate live M-Pesa payments. Pay through a club-approved channel first, then submit the receipt or transaction reference. A submission stays pending until the committee verifies it. Never enter your M-Pesa PIN here.
+      {payHeroEnabled
+        ? 'M-Pesa prompts are sent through PayHero. Approving a prompt does not immediately mark payment successful; PayHero must confirm it. Cash and other approved payments remain subject to committee verification. Never enter your M-Pesa PIN on this website.'
+        : 'Live M-Pesa checkout is not enabled. Pay through a club-approved channel first, then submit the receipt or transaction reference. A submission stays pending until the committee verifies it. Never enter your M-Pesa PIN here.'}
     </p>
 
     <section className="grid gap-4 xl:grid-cols-3" aria-label="Separate member payment options">
@@ -66,7 +70,8 @@ export default async function MemberFeesPage({
           : option.type === 'SUBSCRIPTION'
             ? member.status === 'ACTIVE' && subscriptionStatus !== 'PAID'
             : ['ACTIVE', 'PENDING_REGISTRATION'].includes(member.status)
-        const hasPending = pendingTypes.has(option.type)
+        const pendingPayment = pendingPayments.get(option.type)
+        const hasPending = Boolean(pendingPayment)
         return <article className="card space-y-4" key={option.type}>
           <div>
             <h2>{option.title}</h2>
@@ -84,7 +89,11 @@ export default async function MemberFeesPage({
               )}
             </div>
           )}
-          {hasPending && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">You already have a payment for this fee awaiting committee review.</p>}
+          {pendingPayment && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+            {pendingPayment.source === 'PAYHERO_CHECKOUT'
+              ? 'Your M-Pesa checkout is pending. Approve the prompt on your phone and wait for PayHero confirmation.'
+              : 'You already have a payment for this fee awaiting committee review.'}
+          </p>}
           {!isEligible && <p className="text-sm text-slate-600">
             {option.type === 'REGISTRATION' ? 'Registration payment is available while your membership is pending registration.' :
               option.type === 'SUBSCRIPTION' ? 'Subscription payment is available to active members when a payment is due.' :
@@ -92,12 +101,22 @@ export default async function MemberFeesPage({
           </p>}
 
           {fee && isEligible && !hasPending && (
+            <div className="space-y-4">
+            {payHeroEnabled && <form action={startPayHeroCheckoutAction} className="space-y-3 rounded-lg border border-emerald-200 p-4">
+              <input type="hidden" name="type" value={option.type} />
+              <div>
+                <label className="label" htmlFor={`${option.type}-phone`}>M-Pesa phone number</label>
+                <input className="input" id={`${option.type}-phone`} name="phone" type="tel" defaultValue={member.phone} autoComplete="tel" required />
+                <p className="mt-1 text-xs text-slate-600">Kenyan numbers beginning 01 or 07 are accepted. PayHero will send an M-Pesa approval prompt.</p>
+              </div>
+              <SubmitButton pendingText="Sending M-Pesa prompt…">Pay {formatKES(fee.amount)} with M-Pesa</SubmitButton>
+            </form>}
             <form action={submitMemberPaymentAction} className="space-y-3">
               <input type="hidden" name="type" value={option.type} />
               <div>
-                <label className="label" htmlFor={`${option.type}-method`}>How did you pay?</label>
-                <select className="input" id={`${option.type}-method`} name="method" defaultValue="MPESA">
-                  <option value="MPESA">M-Pesa</option>
+                <label className="label" htmlFor={`${option.type}-method`}>Already paid another way?</label>
+                <select className="input" id={`${option.type}-method`} name="method" defaultValue={payHeroEnabled ? 'CASH' : 'MPESA'}>
+                  <option value="MPESA">M-Pesa paid outside checkout</option>
                   <option value="CASH">Cash</option>
                   <option value="OTHER">Other approved method</option>
                 </select>
@@ -112,6 +131,7 @@ export default async function MemberFeesPage({
               </label>
               <SubmitButton pendingText="Submitting for review…">Submit payment reference</SubmitButton>
             </form>
+            </div>
           )}
         </article>
       })}
@@ -130,8 +150,8 @@ export default async function MemberFeesPage({
             <td className="p-3">{formatKES(payment.amount)}</td>
             <td className="p-3"><span className={`rounded-full px-2 py-1 text-xs font-semibold ${statusClass[payment.status]}`}>{payment.status}</span></td>
             <td className="p-3">{payment.method}</td>
-            <td className="p-3">{payment.reference ?? '—'}</td>
-            <td className="p-3">{payment.source === 'MEMBER_REPORTED' ? 'Committee review' : payment.source === 'PROVIDER_VERIFIED' ? 'Provider verified' : 'Committee recorded'}</td>
+            <td className="p-3">{payment.mpesaReceipt ?? payment.reference ?? '—'}</td>
+            <td className="p-3">{payment.source === 'MEMBER_REPORTED' ? 'Committee review' : payment.source === 'PAYHERO_CHECKOUT' ? 'PayHero confirmation pending' : payment.source === 'PROVIDER_VERIFIED' ? 'Provider verified' : 'Committee recorded'}</td>
           </tr>)}</tbody>
         </table>
       </div> : <p className="text-slate-600">No payments have been recorded for your account yet.</p>}

@@ -9,6 +9,9 @@ const mocks = vi.hoisted(() => ({
   findPaymentByReference: vi.fn(),
   findPaymentRequest: vi.fn(),
   createPaymentRequest: vi.fn(),
+  findPayHeroPayment: vi.fn(),
+  updatePayHeroCheckout: vi.fn(),
+  failPendingPayHeroCheckout: vi.fn(),
   paymentForReview: vi.fn(),
   updatePaymentReview: vi.fn(),
   memberPaymentHistory: vi.fn(),
@@ -21,6 +24,9 @@ const mocks = vi.hoisted(() => ({
   lockRow: vi.fn(),
   writeAuditLog: vi.fn(),
   syncCurrentSeasonMemberStatus: vi.fn(),
+  initiatePayHeroCheckout: vi.fn(),
+  getPayHeroTransactionStatus: vi.fn(),
+  isPayHeroConfigured: vi.fn(),
 }))
 
 vi.mock('server-only', () => ({}))
@@ -35,6 +41,18 @@ vi.mock('@/modules/members/repository', () => ({
 vi.mock('@/modules/seasons/service', () => ({
   syncCurrentSeasonMemberStatus: mocks.syncCurrentSeasonMemberStatus,
 }))
+vi.mock('../src/modules/finance/payhero-client', () => ({
+  initiatePayHeroCheckout: mocks.initiatePayHeroCheckout,
+  getPayHeroTransactionStatus: mocks.getPayHeroTransactionStatus,
+  isPayHeroConfigured: mocks.isPayHeroConfigured,
+  PayHeroError: class PayHeroError extends Error {
+    rejected: boolean
+    constructor(message: string, rejected = false) {
+      super(message)
+      this.rejected = rejected
+    }
+  },
+}))
 vi.mock('../src/modules/finance/repository', () => ({
   financeRepository: {
     transaction: mocks.transaction,
@@ -45,6 +63,9 @@ vi.mock('../src/modules/finance/repository', () => ({
     findPaymentByReference: mocks.findPaymentByReference,
     findPaymentRequest: mocks.findPaymentRequest,
     createPaymentRequest: mocks.createPaymentRequest,
+    findPayHeroPayment: mocks.findPayHeroPayment,
+    updatePayHeroCheckout: mocks.updatePayHeroCheckout,
+    failPendingPayHeroCheckout: mocks.failPendingPayHeroCheckout,
     paymentForReview: mocks.paymentForReview,
     updatePaymentReview: mocks.updatePaymentReview,
     memberPaymentHistory: mocks.memberPaymentHistory,
@@ -61,7 +82,13 @@ vi.mock('../src/modules/finance/repository', () => ({
 
 import { feeSettingInputSchema, memberPaymentRequestSchema, paymentListSchema } from '../src/lib/validation/fees'
 import { paymentWhere } from '../src/lib/payments-query'
-import { recordManualPayment, reviewMemberPayment, submitMemberPayment } from '../src/modules/finance/service'
+import {
+  initiatePayHeroMemberPayment,
+  processPayHeroCallback,
+  recordManualPayment,
+  reviewMemberPayment,
+  submitMemberPayment,
+} from '../src/modules/finance/service'
 import { nairobiDateKey } from '../src/lib/dates'
 
 const memberId = 'c123456789012345678901234'
@@ -73,13 +100,24 @@ describe('member payment claims', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.transaction.mockImplementation(async (work) => work(tx))
-    mocks.memberForPayment.mockResolvedValue({ id: memberId, status: 'ACTIVE' })
+    mocks.memberForPayment.mockResolvedValue({ id: memberId, fullName: 'Test Member', phone: '0712345678', status: 'ACTIVE' })
     mocks.effectiveFee.mockResolvedValue({ amount: 750, billingPeriod: 'MONTHLY' })
     mocks.latestSuccessfulSubscription.mockResolvedValue(null)
     mocks.hasPendingMemberPayment.mockResolvedValue(null)
     mocks.findPaymentByReference.mockResolvedValue(null)
     mocks.findPaymentRequest.mockResolvedValue(null)
     mocks.createPaymentRequest.mockResolvedValue({ id: paymentId, status: 'PENDING' })
+    mocks.findPayHeroPayment.mockResolvedValue({
+      id: paymentId, memberId, type: 'RETREAT_BONDING', amount: 750, phone: '254712345678',
+      reference: 'EDC-123', status: 'PENDING', source: 'PAYHERO_CHECKOUT', recordedById: actorId,
+    })
+    mocks.updatePayHeroCheckout.mockResolvedValue({})
+    mocks.failPendingPayHeroCheckout.mockResolvedValue({ count: 1 })
+    mocks.initiatePayHeroCheckout.mockResolvedValue('checkout-123')
+    mocks.getPayHeroTransactionStatus.mockResolvedValue({
+      reference: 'EDC-123', status: 'SUCCESS', amount: 750, receipt: 'QWERTY123', description: 'Success',
+    })
+    mocks.isPayHeroConfigured.mockReturnValue(true)
     mocks.findSeasonAt.mockResolvedValue(null)
     mocks.paymentForReview.mockResolvedValue({
       id: paymentId, memberId, type: 'RETREAT_BONDING', amount: 750, method: 'MPESA',
@@ -145,6 +183,67 @@ describe('member payment claims', () => {
       memberId, type: 'SUBSCRIPTION', method: 'MPESA', reference: 'NEXT123',
     }, actorId)).rejects.toThrow(/already paid/)
     expect(mocks.createPaymentRequest).not.toHaveBeenCalled()
+  })
+
+  it('creates a server-priced pending PayHero checkout and stores its provider request ID', async () => {
+    const result = await initiatePayHeroMemberPayment({
+      memberId, type: 'RETREAT_BONDING', phone: '0712345678',
+    }, actorId)
+
+    expect(result).toEqual({ paymentId, duplicate: false })
+    expect(mocks.createPaymentRequest).toHaveBeenCalledWith(tx, expect.objectContaining({
+      memberId, type: 'RETREAT_BONDING', amount: 750, method: 'MPESA', phone: '0712345678',
+      status: 'PENDING', source: 'PAYHERO_CHECKOUT', recordedById: actorId,
+      reference: expect.stringMatching(/^EDC-/),
+    }))
+    expect(mocks.initiatePayHeroCheckout).toHaveBeenCalledWith(expect.objectContaining({
+      amount: 750, phone: '0712345678', customerName: 'Test Member',
+    }))
+    expect(mocks.updatePayHeroCheckout).toHaveBeenCalledWith(
+      tx, paymentId, 'checkout-123', 'M-Pesa prompt sent. Waiting for PayHero confirmation.',
+    )
+  })
+
+  it('does not send a second STK prompt when a fee already has a pending payment', async () => {
+    mocks.hasPendingMemberPayment.mockResolvedValue({ id: paymentId })
+    await expect(initiatePayHeroMemberPayment({
+      memberId, type: 'RETREAT_BONDING', phone: '0712345678',
+    }, actorId)).resolves.toEqual({ paymentId, duplicate: true })
+    expect(mocks.initiatePayHeroCheckout).not.toHaveBeenCalled()
+  })
+
+  it('settles only provider-confirmed payments and stores the provider receipt', async () => {
+    await expect(processPayHeroCallback('EDC-123')).resolves.toMatchObject({
+      paymentId, status: 'SUCCESS', duplicate: false,
+    })
+    expect(mocks.getPayHeroTransactionStatus).toHaveBeenCalledWith('EDC-123')
+    expect(mocks.updatePaymentReview).toHaveBeenCalledWith(tx, paymentId, expect.objectContaining({
+      status: 'SUCCESS', source: 'PROVIDER_VERIFIED', mpesaReceipt: 'QWERTY123',
+    }))
+    expect(mocks.writeAuditLog).toHaveBeenCalledWith(tx, expect.objectContaining({
+      action: 'PAYHERO_PAYMENT_VERIFIED',
+    }))
+  })
+
+  it('leaves PayHero checkouts pending until the status API confirms completion', async () => {
+    mocks.getPayHeroTransactionStatus.mockResolvedValue({
+      reference: 'EDC-123', status: 'PENDING', amount: 750, receipt: null, description: 'Processing',
+    })
+    await expect(processPayHeroCallback('EDC-123')).resolves.toMatchObject({ status: 'PENDING', duplicate: false })
+    expect(mocks.updatePaymentReview).not.toHaveBeenCalled()
+  })
+
+  it('rejects mismatched PayHero amount or reference without settling', async () => {
+    mocks.getPayHeroTransactionStatus.mockResolvedValue({
+      reference: 'EDC-OTHER', status: 'SUCCESS', amount: 700, receipt: 'QWERTY123', description: 'Success',
+    })
+    await expect(processPayHeroCallback('EDC-123')).rejects.toThrow(/reference did not match/)
+    expect(mocks.updatePaymentReview).not.toHaveBeenCalled()
+    mocks.getPayHeroTransactionStatus.mockResolvedValue({
+      reference: 'EDC-123', status: 'SUCCESS', amount: 700, receipt: 'QWERTY123', description: 'Success',
+    })
+    await expect(processPayHeroCallback('EDC-123')).rejects.toThrow(/matching amount and receipt/)
+    expect(mocks.updatePaymentReview).not.toHaveBeenCalled()
   })
 
   it('rejects membership payments when the member status does not qualify', async () => {

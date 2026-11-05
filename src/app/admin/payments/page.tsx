@@ -6,6 +6,7 @@ import { paymentListSchema } from '@/lib/validation/fees'
 import { paymentWhere } from '@/lib/payments-query'
 import { recordManualPaymentAction, reviewMemberPaymentAction, waiveFeeAction } from './actions'
 import { adminReadService } from '@/modules/admin/read-service'
+import { isPayHeroConfigured } from '@/modules/finance/payhero-client'
 
 function buildQueryString(filters: Record<string, string | number | undefined>, page?: number, memberPage?: number) {
   const params = new URLSearchParams()
@@ -21,6 +22,7 @@ function buildQueryString(filters: Record<string, string | number | undefined>, 
 
 export default async function PaymentsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await pageUser('COMMITTEE')
+  const payHeroEnabled = isPayHeroConfigured()
   const params = await searchParams
   const parsed = paymentListSchema.safeParse(params)
   const error = typeof params.error === 'string' ? params.error : ''
@@ -56,7 +58,9 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
     {success && <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">{success}</p>}
 
     <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
-      Live online M-Pesa checkout is not configured. Member-submitted references remain pending until an authorized committee member verifies them.
+      {payHeroEnabled
+        ? 'PayHero checkouts remain pending until the server verifies the transaction directly with PayHero. Cash and member-reported claims still require committee review.'
+        : 'Live online M-Pesa checkout is not enabled. Member-submitted references remain pending until an authorized committee member verifies them.'}
     </p>
 
     <section className="card grid gap-4 md:grid-cols-5">
@@ -245,7 +249,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
                 <td className="p-3">{payment.method}</td>
                 <td className="p-3">{formatNairobiDate(payment.paidAt ?? payment.createdAt)}</td>
                 <td className="p-3">{payment.reference ?? '—'}</td>
-                <td className="p-3">{payment.source === 'MEMBER_REPORTED' ? 'Member reported' : payment.source === 'PROVIDER_VERIFIED' ? 'Provider verified' : 'Admin recorded'}</td>
+                <td className="p-3">{payment.source === 'MEMBER_REPORTED' ? 'Member reported' : payment.source === 'PAYHERO_CHECKOUT' ? 'PayHero checkout' : payment.source === 'PROVIDER_VERIFIED' ? 'Provider verified' : 'Admin recorded'}</td>
                 <td className="p-3">{payment.status === 'SUCCESS' ? <Link className="underline" href={`/admin/payments/${payment.id}`}>View receipt</Link> : '—'}</td>
                 <td className="p-3">
                   {payment.source === 'MEMBER_REPORTED' && payment.status === 'PENDING' ? <form action={reviewMemberPaymentAction} className="min-w-52 space-y-2">

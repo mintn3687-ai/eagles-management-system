@@ -10,6 +10,12 @@ import { memberDetailsRepository } from '@/modules/members/repository'
 import { syncCurrentSeasonMemberStatus } from '@/modules/seasons/service'
 import { financeRepository, seasonPaymentsRepository } from './repository'
 import { isPaymentWithinSeason } from './rules'
+import {
+  getPayHeroTransactionStatus,
+  initiatePayHeroCheckout,
+  isPayHeroConfigured,
+  PayHeroError,
+} from './payhero-client'
 
 export class FinanceServiceError extends Error {}
 
@@ -223,6 +229,192 @@ export async function submitMemberPayment(input: {
       details: { memberId: member.id, type: input.type, amount: fee.amount, method: input.method, reference: input.reference.trim() },
     })
     return { paymentId: payment.id, status: payment.status, duplicate: false }
+  })
+}
+
+export async function initiatePayHeroMemberPayment(input: {
+  memberId: string
+  type: 'REGISTRATION' | 'SUBSCRIPTION' | 'RETREAT_BONDING'
+  phone: string
+}, actorId: string) {
+  if (!isPayHeroConfigured()) throw new FinanceServiceError('Online M-Pesa checkout is not configured. Please contact the committee.')
+  const phone = input.phone.trim()
+  const reference = `EDC-${randomUUID().replaceAll('-', '').toUpperCase()}`
+  const idempotencyKey = createHash('sha256').update(`PAYHERO:${reference}`).digest('hex')
+
+  const checkout = await financeRepository.transaction(async (tx) => {
+    await lockRow(tx, 'Member', input.memberId)
+    const member = await financeRepository.memberForPayment(tx, input.memberId)
+    if (!member) throw new FinanceServiceError('Member not found.')
+    if ((input.type === 'REGISTRATION' && member.status !== 'PENDING_REGISTRATION')
+      || (input.type === 'SUBSCRIPTION' && member.status !== 'ACTIVE')
+      || (input.type === 'RETREAT_BONDING' && !['ACTIVE', 'PENDING_REGISTRATION'].includes(member.status))) {
+      throw new FinanceServiceError('This member is not eligible to pay this fee.')
+    }
+
+    const pending = await financeRepository.hasPendingMemberPayment(tx, member.id, input.type)
+    if (pending) return { paymentId: pending.id, duplicate: true as const }
+
+    if (input.type === 'SUBSCRIPTION') {
+      const latest = await financeRepository.latestSuccessfulSubscription(tx, member.id)
+      const periodEnd = latest?.periodEnd ?? latest?.paidAt
+      const graceDays = await getGraceDaysForTransaction(tx)
+      if (periodEnd && Date.now() <= periodEnd.getTime() + graceDays * 86400000) {
+        throw new FinanceServiceError('Your subscription is already paid for the current period.')
+      }
+    }
+
+    const fee = await financeRepository.effectiveFee(tx, input.type, new Date())
+    if (!fee) throw new FinanceServiceError('This fee has not been set. Please contact the committee.')
+    const payment = await financeRepository.createPaymentRequest(tx, {
+      memberId: member.id,
+      type: input.type,
+      amount: fee.amount,
+      status: 'PENDING',
+      method: 'MPESA',
+      phone,
+      reference,
+      source: 'PAYHERO_CHECKOUT',
+      idempotencyKey,
+      recordedById: actorId,
+      resultDesc: 'PayHero M-Pesa checkout is being initiated.',
+    })
+    await writeAuditLog(tx, {
+      actorId,
+      action: 'PAYHERO_CHECKOUT_STARTED',
+      entity: 'Payment',
+      entityId: payment.id,
+      details: { memberId: member.id, type: input.type, amount: fee.amount, reference },
+    })
+    return {
+      paymentId: payment.id,
+      duplicate: false as const,
+      amount: fee.amount,
+      memberName: member.fullName,
+    }
+  })
+
+  if (checkout.duplicate) return { paymentId: checkout.paymentId, duplicate: true }
+
+  try {
+    const checkoutRequestId = await initiatePayHeroCheckout({
+      amount: checkout.amount,
+      phone,
+      reference,
+      customerName: checkout.memberName,
+    })
+    await financeRepository.transaction((tx) => financeRepository.updatePayHeroCheckout(
+      tx,
+      checkout.paymentId,
+      checkoutRequestId,
+      'M-Pesa prompt sent. Waiting for PayHero confirmation.',
+    ))
+    return { paymentId: checkout.paymentId, duplicate: false }
+  } catch (error) {
+    if (error instanceof PayHeroError && error.rejected) {
+      await financeRepository.transaction(async (tx) => {
+        await lockRow(tx, 'Payment', checkout.paymentId)
+        await financeRepository.failPendingPayHeroCheckout(tx, checkout.paymentId, {
+          status: 'FAILED',
+          resultDesc: 'PayHero rejected the checkout request.',
+        })
+      })
+    }
+    if (error instanceof PayHeroError) throw new FinanceServiceError(error.message)
+    throw error
+  }
+}
+
+export async function processPayHeroCallback(reference: string) {
+  const existing = await financeRepository.transaction((tx) => financeRepository.findPayHeroPayment(tx, reference))
+  if (!existing) throw new FinanceServiceError('PayHero payment was not found.')
+  if (existing.source !== 'PAYHERO_CHECKOUT' && existing.source !== 'PROVIDER_VERIFIED') {
+    throw new FinanceServiceError('This is not a PayHero checkout.')
+  }
+  const authoritativeStatus = await getPayHeroTransactionStatus(reference)
+  if (authoritativeStatus.reference !== reference) throw new FinanceServiceError('PayHero transaction reference did not match.')
+
+  return financeRepository.transaction(async (tx) => {
+    const candidate = await financeRepository.findPayHeroPayment(tx, reference)
+    if (!candidate) throw new FinanceServiceError('PayHero payment was not found.')
+    await lockRow(tx, 'Payment', candidate.id)
+    const payment = await financeRepository.findPayHeroPayment(tx, reference)
+    if (!payment) throw new FinanceServiceError('PayHero payment was not found.')
+    if (payment.status !== 'PENDING') {
+      return { paymentId: payment.id, status: payment.status, duplicate: true }
+    }
+    if (payment.source !== 'PAYHERO_CHECKOUT') throw new FinanceServiceError('This payment is not a pending PayHero checkout.')
+
+    if (authoritativeStatus.status === 'PENDING') {
+      return { paymentId: payment.id, status: payment.status, duplicate: false }
+    }
+
+    if (authoritativeStatus.status === 'SUCCESS') {
+      if (authoritativeStatus.amount !== payment.amount || !authoritativeStatus.receipt) {
+        throw new FinanceServiceError('PayHero confirmation did not include a matching amount and receipt.')
+      }
+      const paidAt = new Date()
+      const member = await financeRepository.memberForPayment(tx, payment.memberId)
+      if (!member) throw new FinanceServiceError('Member not found.')
+
+      let periodStart: Date | null = null
+      let periodEnd: Date | null = null
+      if (payment.type === 'SUBSCRIPTION') {
+        const fee = await financeRepository.effectiveFee(tx, 'SUBSCRIPTION', paidAt)
+        const setting = await financeRepository.billingPeriodSetting(tx)
+        const range = getSubscriptionPeriodRange(paidAt, effectiveBillingPeriod(setting, fee))
+        periodStart = range.start
+        periodEnd = range.end
+      }
+      if (payment.type !== 'RETREAT_BONDING') {
+        await recordSeasonPayment(tx, { paymentId: payment.id, memberId: payment.memberId, paidAt, amount: payment.amount })
+      }
+      if (payment.type === 'REGISTRATION' && member.status === 'PENDING_REGISTRATION') {
+        await financeRepository.activateMember(tx, member.id, paidAt)
+        await syncCurrentSeasonMemberStatus(tx, member.id, 'ACTIVE')
+        await memberDetailsRepository.recordStatusChange(tx, member.id, member.status, 'ACTIVE', paidAt)
+      } else if (payment.type === 'SUBSCRIPTION' && member.status === 'ACTIVE') {
+        await syncCurrentSeasonMemberStatus(tx, member.id, 'ACTIVE')
+      }
+
+      await financeRepository.updatePaymentReview(tx, payment.id, {
+        status: 'SUCCESS',
+        source: 'PROVIDER_VERIFIED',
+        paidAt,
+        periodStart,
+        periodEnd,
+        mpesaReceipt: authoritativeStatus.receipt,
+        resultDesc: authoritativeStatus.description,
+      })
+      await writeAuditLog(tx, {
+        actorId: payment.recordedById,
+        action: 'PAYHERO_PAYMENT_VERIFIED',
+        entity: 'Payment',
+        entityId: payment.id,
+        details: {
+          memberId: payment.memberId,
+          type: payment.type,
+          amount: payment.amount,
+          reference,
+          receipt: authoritativeStatus.receipt,
+          verifiedBy: 'PayHero transaction-status API',
+        },
+      })
+      return { paymentId: payment.id, status: 'SUCCESS' as const, duplicate: false }
+    }
+
+    await financeRepository.updatePaymentReview(tx, payment.id, {
+      status: authoritativeStatus.status,
+      resultDesc: authoritativeStatus.description,
+    })
+    await writeAuditLog(tx, {
+      actorId: payment.recordedById,
+      action: 'PAYHERO_PAYMENT_NOT_COMPLETED',
+      entity: 'Payment',
+      entityId: payment.id,
+      details: { memberId: payment.memberId, type: payment.type, reference, status: authoritativeStatus.status },
+    })
+    return { paymentId: payment.id, status: authoritativeStatus.status, duplicate: false }
   })
 }
 
