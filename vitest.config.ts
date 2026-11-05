@@ -29,5 +29,6 @@ export default defineConfig({
     'tests/festival-document-storage.test.ts',
     'tests/festival-proposal-pdf.test.ts',
     'tests/festival-proposal-route.test.ts',
+    'tests/member-roster-pdf.test.ts',
   ] },
 })

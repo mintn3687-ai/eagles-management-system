@@ -54,6 +54,20 @@ export const memberDetailsRepository = {
     where: { id: memberId },
     select: { userId: true, fullName: true, phone: true },
   }),
+  rosterPdfPage: (cursor?: string, take = 500) => prisma.member.findMany({
+    orderBy: [{ fullName: 'asc' }, { id: 'asc' }],
+    take,
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    select: {
+      id: true,
+      fullName: true,
+      phone: true,
+      email: true,
+      studentRegNo: true,
+      status: true,
+      joinedAt: true,
+    },
+  }),
   findById: (memberId: string) => prisma.member.findUnique({
     where: { id: memberId },
     select: {
