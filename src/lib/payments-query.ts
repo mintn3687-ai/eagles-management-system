@@ -12,10 +12,16 @@ export function paymentWhere(filters: PaymentFilters): Prisma.PaymentWhereInput 
   if (filters.method) where.method = filters.method
   if (filters.member) where.memberId = filters.member
   if (filters.from || filters.to) {
-    where.paidAt = {
+    const dateRange = {
       ...(filters.from ? { gte: parseNairobiDate(filters.from) } : {}),
       ...(filters.to ? { lt: new Date(parseNairobiDate(filters.to).getTime() + 24 * 60 * 60 * 1000) } : {}),
     }
+    where.AND = [
+      { OR: [
+        { paidAt: dateRange },
+        { paidAt: null, createdAt: dateRange },
+      ] },
+    ]
   }
   return where
 }

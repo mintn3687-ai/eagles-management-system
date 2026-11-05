@@ -45,7 +45,7 @@ export const adminExportRepository = {
       skip,
       take,
       select: {
-        id: true, type: true, status: true, method: true, amount: true,
+        id: true, type: true, status: true, method: true, source: true, amount: true,
         paidAt: true, createdAt: true, reference: true,
         member: { select: { fullName: true } },
       },

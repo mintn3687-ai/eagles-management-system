@@ -63,6 +63,10 @@ export default async function PaymentReceiptPage({ params }: { params: Promise<{
           <p className="text-sm text-slate-500">Reference</p>
           <p>{payment.reference ?? '—'}</p>
         </div>
+        <div>
+          <p className="text-sm text-slate-500">Payment source</p>
+          <p>{payment.source === 'MEMBER_REPORTED' ? 'Member reported; committee reviewed' : payment.source === 'PROVIDER_VERIFIED' ? 'Provider verified' : 'Admin recorded'}</p>
+        </div>
       </div>
 
       <div className="rounded-lg bg-stone-50 p-4 text-sm text-slate-700">

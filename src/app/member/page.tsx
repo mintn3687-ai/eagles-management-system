@@ -37,7 +37,7 @@ export default async function MemberPage() {
     )}
     {isMember && <Link className="btn-secondary w-full" href="/member/attendance">Mark attendance</Link>}
     {user.member?.status === 'ACTIVE' && <Link className="btn-secondary w-full" href="/member/stats">My monthly stats</Link>}
-    {user.member?.status === 'ACTIVE' && <Link className="btn-secondary w-full" href="/member/fees">Subscription fee</Link>}
+    {isMember && <Link className="btn-secondary w-full" href="/member/fees">Payments</Link>}
     {user.member?.status === 'ACTIVE' && <Link className="btn-secondary w-full" href="/member/reimbursements">My reimbursements</Link>}
     {isMember && <Link className="btn-secondary w-full" href="/member/meetings">Meetings and action items</Link>}
     {isMember && user.member?.status === 'ACTIVE' && <Link className="btn-secondary w-full" href="/member/productions">My production call sheets</Link>}

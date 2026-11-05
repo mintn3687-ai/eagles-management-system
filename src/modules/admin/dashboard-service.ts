@@ -21,6 +21,7 @@ export async function getDashboardData(requestedOverduePage = 1) {
   const totals = {
     REGISTRATION: { amount: 0, count: 0 },
     SUBSCRIPTION: { amount: 0, count: 0 },
+    RETREAT_BONDING: { amount: 0, count: 0 },
   }
   for (const row of paymentTotals) {
     totals[row.type] = { amount: row._sum.amount ?? 0, count: row._count._all }

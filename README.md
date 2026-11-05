@@ -89,8 +89,8 @@ commit environment files.
 - **Invite**: User invitation system
 - **Rehearsal**: Schedule management with check-in codes
 - **Attendance**: Present/absent tracking with committee review
-- **FeeSetting**: Configurable fees (Registration and Subscription)
-- **Payment**: Payment processing with M-Pesa integration support
+- **FeeSetting**: Configurable registration, subscription, and retreat/bonding fees
+- **Payment**: Audited manual payments and member-submitted payment references with committee verification
 - **Setting**: Club-wide configuration settings
 - **AuditLog**: Activity tracking
 
@@ -154,9 +154,10 @@ Apply the additive `20261022090436_production_entities` migration with `npm run 
 - Active current-season members submit and track their own reimbursement requests at `/member/reimbursements`. Approved reimbursements are marked paid with a payment reference and create a finance expense entry.
 - Ticket types, sales, guest lists, and partial refunds are tracked for scheduled production shows. Ticket capacity and cumulative refund limits are enforced by services and database constraints where applicable.
 - Payment and box-office statement entries reconcile against successful member payments or ticket sales using exact method/reference/amount matches. Reports export CSV for all finance records, a season, a production, or a combined scope.
-- Finance permissions are centralized: `finance:manage` is Committee and Super Admin; `fees:manage` is Super Admin-only; `reimbursements:request` is for signed-in member roles and requires active current-season membership. M-Pesa remains simulated unless a real integration is separately enabled.
+- Finance permissions are centralized: `finance:manage` is Committee and Super Admin; `fees:manage` is Super Admin-only; `reimbursements:request` is for signed-in member roles and requires active current-season membership. No live M-Pesa checkout or provider callback is configured.
+- Members can view separate registration, subscription, and retreat/bonding fees and submit receipt references at `/member/fees`. Claims stay pending until a Committee or Super Admin verifies/rejects them in `/admin/payments`; live online checkout is not configured.
 
-Apply the additive `202610230003_phase5_finance_operations` migration with `npm run db:migrate`. Read [docs/finance.md](./docs/finance.md) for the data model, money rules, routes, manual checks, and limitations.
+Apply the additive `202610230003_phase5_finance_operations` and `20261105160000_member_payment_claims` migrations with `npm run db:migrate`. Read [docs/finance.md](./docs/finance.md) for the data model, money rules, routes, manual checks, and limitations.
 
 ### Sample Data
 - One Super Administrator

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { userIdSchema } from '@/lib/validation'
 
-export const feeTypeSchema = z.enum(['REGISTRATION', 'SUBSCRIPTION'] as const)
+export const feeTypeSchema = z.enum(['REGISTRATION', 'SUBSCRIPTION', 'RETREAT_BONDING'] as const)
 export const billingPeriodSchema = z.enum(['MONTHLY', 'TERM', 'YEAR'] as const)
 export const paymentStatusSchema = z.enum(['PENDING', 'SUCCESS', 'FAILED', 'CANCELLED'] as const)
 export const paymentMethodSchema = z.enum(['MPESA', 'CASH', 'OTHER'] as const)
@@ -24,15 +24,29 @@ export const feeSettingInputSchema = z.object({
 
 export const manualPaymentSchema = z.object({
   memberId: userIdSchema,
+  type: feeTypeSchema.optional(),
   method: manualPaymentMethodSchema,
   reference: z.string().trim().min(3, 'Add a payment reference.').max(120),
   paymentDate: dateKeySchema,
-  reason: z.string().trim().max(500).optional(),
+  reason: z.string().trim().min(3, 'Add a reason for recording this manual payment.').max(500),
 })
 
 export const waiveFeeSchema = z.object({
   memberId: userIdSchema,
   reason: z.string().trim().min(3, 'Add a reason for the waiver.').max(500),
+})
+
+export const memberPaymentRequestSchema = z.object({
+  type: feeTypeSchema,
+  method: paymentMethodSchema,
+  reference: z.string().trim().min(3, 'Enter the payment reference from your receipt.').max(120),
+  confirmPaid: z.literal('on', { message: 'Confirm that you have already made this payment.' }),
+})
+
+export const reviewMemberPaymentSchema = z.object({
+  paymentId: userIdSchema,
+  decision: z.enum(['SUCCESS', 'FAILED', 'CANCELLED']),
+  reason: z.string().trim().min(3, 'Enter a review note.').max(500),
 })
 
 export const paymentListSchema = z.object({

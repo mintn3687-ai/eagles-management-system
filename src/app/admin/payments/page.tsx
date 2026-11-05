@@ -4,7 +4,7 @@ import { pageUser } from '@/lib/page-access'
 import { formatKES } from '@/lib/money'
 import { paymentListSchema } from '@/lib/validation/fees'
 import { paymentWhere } from '@/lib/payments-query'
-import { recordManualPaymentAction, waiveFeeAction } from './actions'
+import { recordManualPaymentAction, reviewMemberPaymentAction, waiveFeeAction } from './actions'
 import { adminReadService } from '@/modules/admin/read-service'
 
 function buildQueryString(filters: Record<string, string | number | undefined>, page?: number, memberPage?: number) {
@@ -36,7 +36,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
   const memberPageCount = Math.max(1, Math.ceil(memberCount / 20))
   const memberPage = Math.min(filters.memberPage, memberPageCount)
 
-  const [[payments, total, totalRegistration, totalSubscription], [, members]] = await Promise.all([
+  const [[payments, total, totalRegistration, totalSubscription, totalRetreatBonding, paymentGroups], [, members]] = await Promise.all([
     adminReadService.paymentLedger(where, filters.page, 20),
     adminReadService.paymentMemberOptions(memberPage, 20),
   ])
@@ -55,7 +55,11 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
     {error && <p className="error">{error}</p>}
     {success && <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">{success}</p>}
 
-    <section className="card grid gap-4 md:grid-cols-4">
+    <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+      Live online M-Pesa checkout is not configured. Member-submitted references remain pending until an authorized committee member verifies them.
+    </p>
+
+    <section className="card grid gap-4 md:grid-cols-5">
       <div className="rounded-xl bg-rose-50 p-4">
         <p className="text-sm text-rose-800">Registration</p>
         <p className="mt-2 text-2xl font-semibold text-rose-900">{formatKES(totalRegistration._sum.amount ?? 0)}</p>
@@ -64,9 +68,29 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
         <p className="text-sm text-amber-800">Subscription</p>
         <p className="mt-2 text-2xl font-semibold text-amber-900">{formatKES(totalSubscription._sum.amount ?? 0)}</p>
       </div>
+      <div className="rounded-xl bg-emerald-50 p-4">
+        <p className="text-sm text-emerald-800">Retreat / bonding</p>
+        <p className="mt-2 text-2xl font-semibold text-emerald-900">{formatKES(totalRetreatBonding._sum.amount ?? 0)}</p>
+      </div>
       <div className="rounded-xl bg-slate-100 p-4 md:col-span-2">
         <p className="text-sm text-slate-700">Rows</p>
         <p className="mt-2 text-2xl font-semibold text-slate-900">{total}</p>
+      </div>
+    </section>
+
+    <section className="card">
+      <h2>Payment counts by type and status</h2>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-stone-100"><tr><th className="p-3">Fee type</th><th className="p-3">Status</th><th className="p-3">Count</th><th className="p-3">Amount</th></tr></thead>
+          <tbody>{paymentGroups.map((group) => <tr className="border-t border-slate-200" key={`${group.type}-${group.status}`}>
+            <td className="p-3">{group.type.replaceAll('_', ' ')}</td>
+            <td className="p-3">{group.status}</td>
+            <td className="p-3">{group._count._all}</td>
+            <td className="p-3">{formatKES(group._sum.amount ?? 0)}</td>
+          </tr>)}
+          {!paymentGroups.length && <tr><td className="p-3 text-slate-600" colSpan={4}>No payments match these filters.</td></tr>}</tbody>
+        </table>
       </div>
     </section>
 
@@ -82,6 +106,15 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
         </div>
 
         <div>
+          <label className="label" htmlFor="type">Fee type</label>
+          <select className="input" id="type" name="type" defaultValue="REGISTRATION" required>
+            <option value="REGISTRATION">Registration</option>
+            <option value="SUBSCRIPTION">Subscription</option>
+            <option value="RETREAT_BONDING">Retreat / bonding</option>
+          </select>
+        </div>
+
+        <div>
           <label className="label" htmlFor="method">Method</label>
           <select className="input" id="method" name="method" defaultValue="CASH">
             <option value="CASH">Cash</option>
@@ -89,7 +122,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
           </select>
         </div>
 
-        <p className="rounded-lg bg-stone-50 p-3 text-sm text-slate-600 md:col-span-2">The payment uses the current fee amount saved in Fee settings.</p>
+        <p className="rounded-lg bg-stone-50 p-3 text-sm text-slate-600 md:col-span-2">The payment uses the current fee amount for the selected type saved in Fee settings.</p>
 
         <div>
           <label className="label" htmlFor="date">Date</label>
@@ -103,7 +136,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
 
         <div className="md:col-span-2">
           <label className="label" htmlFor="reason">Reason</label>
-          <textarea className="input" id="reason" name="reason" rows={3} placeholder="Optional note for the payment record" />
+          <textarea className="input" id="reason" name="reason" rows={3} minLength={3} maxLength={500} required placeholder="Required note explaining this manual payment record" />
         </div>
 
         <button className="btn-primary md:col-span-2" type="submit">Record payment</button>
@@ -140,6 +173,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
             <option value="">All</option>
             <option value="REGISTRATION">Registration</option>
             <option value="SUBSCRIPTION">Subscription</option>
+            <option value="RETREAT_BONDING">Retreat / bonding</option>
           </select>
         </div>
         <div>
@@ -196,7 +230,9 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
               <th className="p-3">Method</th>
               <th className="p-3">Date</th>
               <th className="p-3">Reference</th>
+              <th className="p-3">Source</th>
               <th className="p-3">Receipt</th>
+              <th className="p-3">Review</th>
             </tr>
           </thead>
           <tbody>
@@ -209,7 +245,20 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
                 <td className="p-3">{payment.method}</td>
                 <td className="p-3">{formatNairobiDate(payment.paidAt ?? payment.createdAt)}</td>
                 <td className="p-3">{payment.reference ?? '—'}</td>
+                <td className="p-3">{payment.source === 'MEMBER_REPORTED' ? 'Member reported' : payment.source === 'PROVIDER_VERIFIED' ? 'Provider verified' : 'Admin recorded'}</td>
                 <td className="p-3">{payment.status === 'SUCCESS' ? <Link className="underline" href={`/admin/payments/${payment.id}`}>View receipt</Link> : '—'}</td>
+                <td className="p-3">
+                  {payment.source === 'MEMBER_REPORTED' && payment.status === 'PENDING' ? <form action={reviewMemberPaymentAction} className="min-w-52 space-y-2">
+                    <input type="hidden" name="paymentId" value={payment.id} />
+                    <label className="sr-only" htmlFor={`review-reason-${payment.id}`}>Review reason</label>
+                    <input className="input" id={`review-reason-${payment.id}`} name="reason" minLength={3} maxLength={500} required placeholder="Verification note" />
+                    <div className="flex gap-2">
+                      <button className="btn-primary min-h-10 px-3 py-2 text-sm" name="decision" value="SUCCESS" type="submit">Verify</button>
+                      <button className="btn-secondary min-h-10 px-3 py-2 text-sm" name="decision" value="FAILED" type="submit">Reject</button>
+                      <button className="btn-secondary min-h-10 px-3 py-2 text-sm" name="decision" value="CANCELLED" type="submit">Cancel</button>
+                    </div>
+                  </form> : payment.source === 'MEMBER_REPORTED' ? payment.resultDesc ?? 'Reviewed' : '—'}
+                </td>
               </tr>
             ))}
           </tbody>

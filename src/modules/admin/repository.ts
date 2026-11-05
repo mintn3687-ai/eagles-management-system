@@ -67,6 +67,13 @@ export const adminRepository = {
     prisma.payment.count({ where }),
     prisma.payment.aggregate({ where: { ...where, type: 'REGISTRATION', status: 'SUCCESS' }, _sum: { amount: true } }),
     prisma.payment.aggregate({ where: { ...where, type: 'SUBSCRIPTION', status: 'SUCCESS' }, _sum: { amount: true } }),
+    prisma.payment.aggregate({ where: { ...where, type: 'RETREAT_BONDING', status: 'SUCCESS' }, _sum: { amount: true } }),
+    prisma.payment.groupBy({
+      by: ['type', 'status'],
+      where,
+      _count: { _all: true },
+      _sum: { amount: true },
+    }),
   ]),
   paymentReceipt: (id: string) => prisma.payment.findUnique({
     where: { id },

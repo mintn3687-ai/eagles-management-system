@@ -1,5 +1,6 @@
 import 'server-only'
 import { randomUUID } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import { type BillingPeriod, type FeeType, type PaymentMethod, type Prisma } from '@prisma/client'
 import { writeAuditLog } from '@/lib/audit'
 import { lockRow } from '@/lib/row-lock'
@@ -22,6 +23,7 @@ function effectiveBillingPeriod(setting: { value: Prisma.JsonValue } | null, fee
 
 export async function recordManualPayment(input: {
   memberId: string
+  type?: 'REGISTRATION' | 'SUBSCRIPTION' | 'RETREAT_BONDING'
   method: Extract<PaymentMethod, 'CASH' | 'OTHER'>
   reference: string
   paymentDate: string
@@ -33,8 +35,18 @@ export async function recordManualPayment(input: {
     await lockRow(tx, 'Member', input.memberId)
     const member = await financeRepository.memberForPayment(tx, input.memberId)
     if (!member) throw new FinanceServiceError('Member not found.')
-    const type = resolveMemberFeeType(member.status)
-    if (!type) throw new FinanceServiceError('This member is not eligible for a fee payment right now.')
+    const type = input.type ?? resolveMemberFeeType(member.status)
+    if (!type || (type === 'REGISTRATION' && member.status !== 'PENDING_REGISTRATION')
+      || (type === 'SUBSCRIPTION' && member.status !== 'ACTIVE')
+      || (type === 'RETREAT_BONDING' && !['ACTIVE', 'PENDING_REGISTRATION'].includes(member.status))) {
+      throw new FinanceServiceError('This member is not eligible for this fee payment right now.')
+    }
+    if (await financeRepository.hasPendingMemberPayment(tx, member.id, type)) {
+      throw new FinanceServiceError('This member already has a payment claim awaiting review.')
+    }
+    if (await financeRepository.findPaymentByReference(tx, member.id, type, input.reference.trim())) {
+      throw new FinanceServiceError('A payment with this reference has already been recorded.')
+    }
     const fee = await financeRepository.effectiveFee(tx, type, paidAt)
     if (!fee) throw new FinanceServiceError('Set a fee amount before recording a payment.')
     const setting = type === 'SUBSCRIPTION' ? await financeRepository.billingPeriodSetting(tx) : null
@@ -53,12 +65,14 @@ export async function recordManualPayment(input: {
       periodEnd: periodRange?.end ?? null,
       resultDesc: input.reason || 'Manual payment recorded by committee.',
     })
-    await recordSeasonPayment(tx, { paymentId: payment.id, memberId: member.id, paidAt, amount: fee.amount })
+    if (type !== 'RETREAT_BONDING') {
+      await recordSeasonPayment(tx, { paymentId: payment.id, memberId: member.id, paidAt, amount: fee.amount })
+    }
     if (type === 'REGISTRATION') {
       await financeRepository.activateMember(tx, member.id, paidAt)
       await syncCurrentSeasonMemberStatus(tx, member.id, 'ACTIVE')
       await memberDetailsRepository.recordStatusChange(tx, member.id, member.status, 'ACTIVE', paidAt)
-    } else {
+    } else if (type === 'SUBSCRIPTION') {
       await financeRepository.activateMember(tx, member.id)
       await syncCurrentSeasonMemberStatus(tx, member.id, 'ACTIVE')
     }
@@ -67,7 +81,7 @@ export async function recordManualPayment(input: {
       action: 'PAYMENT_RECORDED',
       entity: 'Payment',
       entityId: payment.id,
-      details: { memberId: member.id, type, amount: fee.amount, method: input.method, reference: input.reference, reason: input.reason ?? '' },
+      details: { memberId: member.id, type, amount: fee.amount, method: input.method, reference: input.reference, reason: input.reason ?? '', source: 'ADMIN_MANUAL' },
     })
     return { paymentId: payment.id }
   })
@@ -130,7 +144,7 @@ export async function createFeeSetting(input: {
     const setting = await financeRepository.createFeeSetting(tx, {
       type: input.type,
       amount: input.amount,
-      billingPeriod: input.type === 'REGISTRATION' ? null : input.billingPeriod,
+      billingPeriod: input.type === 'SUBSCRIPTION' ? input.billingPeriod : null,
       effectiveFrom,
       reason: input.reason,
       createdById: actorId,
@@ -147,6 +161,148 @@ export async function createFeeSetting(input: {
     })
     return { feeSettingId: setting.id }
   })
+}
+
+export async function submitMemberPayment(input: {
+  memberId: string
+  type: 'REGISTRATION' | 'SUBSCRIPTION' | 'RETREAT_BONDING'
+  method: PaymentMethod
+  reference: string
+}, actorId: string) {
+  const idempotencyKey = createHash('sha256')
+    .update(`${input.memberId}:${input.type}:${input.reference.trim().toUpperCase()}`)
+    .digest('hex')
+
+  return financeRepository.transaction(async (tx) => {
+    await lockRow(tx, 'Member', input.memberId)
+    const member = await financeRepository.memberForPayment(tx, input.memberId)
+    if (!member) throw new FinanceServiceError('Member not found.')
+    if ((input.type === 'REGISTRATION' && member.status !== 'PENDING_REGISTRATION')
+      || (input.type === 'SUBSCRIPTION' && member.status !== 'ACTIVE')
+      || (input.type === 'RETREAT_BONDING' && !['ACTIVE', 'PENDING_REGISTRATION'].includes(member.status))) {
+      throw new FinanceServiceError('This member is not eligible to submit this fee payment.')
+    }
+
+    const existing = await financeRepository.findPaymentRequest(tx, idempotencyKey)
+    if (existing) return { paymentId: existing.id, status: existing.status, duplicate: true }
+    const recorded = await financeRepository.findPaymentByReference(tx, member.id, input.type, input.reference.trim())
+    if (recorded) return { paymentId: recorded.id, status: recorded.status, duplicate: true }
+
+    const pending = await financeRepository.hasPendingMemberPayment(tx, member.id, input.type)
+    if (pending) throw new FinanceServiceError('You already have a payment awaiting committee review for this fee.')
+
+    if (input.type === 'SUBSCRIPTION') {
+      const latest = await financeRepository.latestSuccessfulSubscription(tx, member.id)
+      const periodEnd = latest?.periodEnd ?? latest?.paidAt
+      const graceDays = await getGraceDaysForTransaction(tx)
+      if (periodEnd && Date.now() <= periodEnd.getTime() + graceDays * 86400000) {
+        throw new FinanceServiceError('Your subscription is already paid for the current period.')
+      }
+    }
+
+    const at = new Date()
+    const fee = await financeRepository.effectiveFee(tx, input.type, at)
+    if (!fee) throw new FinanceServiceError('This fee has not been set. Please contact the committee.')
+    const payment = await financeRepository.createPaymentRequest(tx, {
+      memberId: member.id,
+      type: input.type,
+      amount: fee.amount,
+      status: 'PENDING',
+      method: input.method,
+      reference: input.reference.trim(),
+      source: 'MEMBER_REPORTED',
+      idempotencyKey,
+      recordedById: actorId,
+      resultDesc: 'Member reported payment; awaiting committee verification.',
+    })
+    await writeAuditLog(tx, {
+      actorId,
+      action: 'MEMBER_PAYMENT_SUBMITTED',
+      entity: 'Payment',
+      entityId: payment.id,
+      details: { memberId: member.id, type: input.type, amount: fee.amount, method: input.method, reference: input.reference.trim() },
+    })
+    return { paymentId: payment.id, status: payment.status, duplicate: false }
+  })
+}
+
+async function getGraceDaysForTransaction(tx: Prisma.TransactionClient) {
+  const setting = await tx.setting.findUnique({ where: { key: 'graceDays' }, select: { value: true } })
+  const raw = setting?.value
+  const value = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : 7
+  return Number.isFinite(value) && value >= 0 ? value : 7
+}
+
+export async function reviewMemberPayment(input: {
+  paymentId: string
+  decision: 'SUCCESS' | 'FAILED' | 'CANCELLED'
+  reason: string
+}, actorId: string) {
+  const reviewedAt = new Date()
+  return financeRepository.transaction(async (tx) => {
+    await lockRow(tx, 'Payment', input.paymentId)
+    const payment = await financeRepository.paymentForReview(tx, input.paymentId)
+    if (!payment || payment.source !== 'MEMBER_REPORTED') throw new FinanceServiceError('Member payment claim not found.')
+    if (payment.status !== 'PENDING') throw new FinanceServiceError('This payment claim has already been reviewed.')
+
+    let periodStart: Date | null = null
+    let periodEnd: Date | null = null
+    if (input.decision === 'SUCCESS') {
+      const member = await financeRepository.memberForPayment(tx, payment.memberId)
+      if (!member) throw new FinanceServiceError('Member not found.')
+      if ((payment.type === 'REGISTRATION' && member.status !== 'PENDING_REGISTRATION')
+        || (payment.type === 'SUBSCRIPTION' && member.status !== 'ACTIVE')) {
+        throw new FinanceServiceError('The member status no longer permits approval of this fee.')
+      }
+      if (payment.type === 'SUBSCRIPTION') {
+        const fee = await financeRepository.effectiveFee(tx, 'SUBSCRIPTION', reviewedAt)
+        const setting = await financeRepository.billingPeriodSetting(tx)
+        const billingPeriod = effectiveBillingPeriod(setting, fee)
+        const range = getSubscriptionPeriodRange(reviewedAt, billingPeriod)
+        periodStart = range.start
+        periodEnd = range.end
+      }
+
+      if (payment.type !== 'RETREAT_BONDING') {
+        await recordSeasonPayment(tx, {
+          paymentId: payment.id,
+          memberId: payment.memberId,
+          paidAt: reviewedAt,
+          amount: payment.amount,
+        })
+      }
+      if (payment.type === 'REGISTRATION') {
+        await financeRepository.activateMember(tx, payment.memberId, reviewedAt)
+        await syncCurrentSeasonMemberStatus(tx, payment.memberId, 'ACTIVE')
+        await memberDetailsRepository.recordStatusChange(tx, payment.memberId, member.status, 'ACTIVE', reviewedAt)
+      } else if (payment.type === 'SUBSCRIPTION') {
+        await financeRepository.activateMember(tx, payment.memberId)
+        await syncCurrentSeasonMemberStatus(tx, payment.memberId, 'ACTIVE')
+      }
+    }
+
+    await financeRepository.updatePaymentReview(tx, payment.id, {
+      status: input.decision,
+      paidAt: input.decision === 'SUCCESS' ? reviewedAt : null,
+      periodStart,
+      periodEnd,
+      resultDesc: input.reason,
+    })
+    await writeAuditLog(tx, {
+      actorId,
+      action: input.decision === 'SUCCESS'
+        ? 'MEMBER_PAYMENT_VERIFIED'
+        : input.decision === 'CANCELLED' ? 'MEMBER_PAYMENT_CANCELLED' : 'MEMBER_PAYMENT_REJECTED',
+      entity: 'Payment',
+      entityId: payment.id,
+      details: { memberId: payment.memberId, type: payment.type, amount: payment.amount, method: payment.method, reference: payment.reference, decision: input.decision, reason: input.reason },
+    })
+    return { paymentId: payment.id, status: input.decision }
+  })
+}
+
+export async function listMemberPaymentHistory(memberId: string) {
+  return financeRepository.memberPaymentHistory(memberId)
 }
 
 export async function recordSeasonPayment(

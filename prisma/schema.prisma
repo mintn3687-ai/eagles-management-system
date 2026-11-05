@@ -51,6 +51,7 @@ enum ReviewStatus {
 enum FeeType {
   REGISTRATION
   SUBSCRIPTION
+  RETREAT_BONDING
 }
 
 enum BillingPeriod {
@@ -62,6 +63,13 @@ enum BillingPeriod {
 enum PaymentType {
   REGISTRATION
   SUBSCRIPTION
+  RETREAT_BONDING
+}
+
+enum PaymentSource {
+  ADMIN_MANUAL
+  MEMBER_REPORTED
+  PROVIDER_VERIFIED
 }
 
 enum PaymentStatus {
@@ -451,6 +459,8 @@ model Payment {
   checkoutRequestId String?       @unique
   mpesaReceipt      String?       @unique
   reference         String?
+  source            PaymentSource @default(ADMIN_MANUAL)
+  idempotencyKey    String?       @unique
   periodStart       DateTime?
   periodEnd         DateTime?
   resultDesc        String?
@@ -468,6 +478,7 @@ model Payment {
   @@index([memberId, type, createdAt, id])
   @@index([type, status, memberId, paidAt(sort: Desc), id(sort: Desc)])
   @@index([seasonId, status, type, paidAt])
+  @@index([memberId, source, status, createdAt(sort: Desc)])
 }
 
 model Season {

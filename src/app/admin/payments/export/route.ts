@@ -4,7 +4,7 @@ import { requireRole } from '@/lib/permissions'
 import { paymentListSchema } from '@/lib/validation/fees'
 import { adminExportRepository } from '@/modules/admin/export-repository'
 
-const columns = ['Receipt number', 'Member', 'Type', 'Status', 'Method', 'Amount (KES)', 'Date', 'Reference']
+const columns = ['Receipt number', 'Member', 'Type', 'Status', 'Method', 'Source', 'Amount (KES)', 'Date', 'Reference']
 const encoder = new TextEncoder()
 
 function csvCell(value: string | number) {
@@ -35,6 +35,7 @@ export async function GET(request: Request) {
               payment.type,
               payment.status,
               payment.method,
+              payment.source,
               payment.amount,
               formatNairobiDate(payment.paidAt ?? payment.createdAt),
               payment.reference ?? '',

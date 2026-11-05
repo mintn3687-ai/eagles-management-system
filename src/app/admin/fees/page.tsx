@@ -20,9 +20,10 @@ export default async function FeesPage({ searchParams }: { searchParams: Promise
   const historyPageCount = Math.max(1, Math.ceil(historyTotal / PAGE_SIZE))
   const historyPage = Math.min(requestedPage, historyPageCount)
 
-  const [registration, subscription, history] = await Promise.all([
+  const [registration, subscription, retreatBonding, history] = await Promise.all([
     getCurrentFee('REGISTRATION'),
     getCurrentFee('SUBSCRIPTION'),
+    getCurrentFee('RETREAT_BONDING'),
     adminReadService.feeHistoryPage(historyPage, PAGE_SIZE),
   ])
 
@@ -30,7 +31,7 @@ export default async function FeesPage({ searchParams }: { searchParams: Promise
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div>
         <p className="mb-2 text-sm font-semibold uppercase tracking-widest text-emerald-700">Fee settings</p>
-        <h1>Registration and subscription fees</h1>
+        <h1>Member fee settings</h1>
       </div>
       <Link className="btn-secondary" href="/admin/payments">View ledger</Link>
     </div>
@@ -38,7 +39,7 @@ export default async function FeesPage({ searchParams }: { searchParams: Promise
     {error && <p className="error">{error}</p>}
     {success && <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">{success}</p>}
 
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="grid gap-4 md:grid-cols-3">
       <section className="card">
         <h2>Registration fee</h2>
         {registration ? (
@@ -60,6 +61,17 @@ export default async function FeesPage({ searchParams }: { searchParams: Promise
             <p><strong>Reason:</strong> {subscription.reason}</p>
           </div>
         ) : <p>No subscription fee has been set yet.</p>}
+      </section>
+
+      <section className="card">
+        <h2>Retreat / bonding fee</h2>
+        {retreatBonding ? (
+          <div className="space-y-2 text-sm text-slate-700">
+            <p><strong>Amount:</strong> {formatKES(retreatBonding.amount)}</p>
+            <p><strong>Effective from:</strong> {formatNairobiDate(retreatBonding.effectiveFrom)}</p>
+            <p><strong>Reason:</strong> {retreatBonding.reason}</p>
+          </div>
+        ) : <p>No retreat or bonding fee has been set yet.</p>}
       </section>
     </div>
 
@@ -106,6 +118,7 @@ export default async function FeesPage({ searchParams }: { searchParams: Promise
             <select className="input" id="type" name="type" defaultValue="REGISTRATION">
               <option value="REGISTRATION">Registration</option>
               <option value="SUBSCRIPTION">Subscription</option>
+              <option value="RETREAT_BONDING">Retreat / bonding</option>
             </select>
           </div>
 
@@ -117,7 +130,7 @@ export default async function FeesPage({ searchParams }: { searchParams: Promise
           <div>
             <label className="label" htmlFor="billingPeriod">Billing period</label>
             <select className="input" id="billingPeriod" name="billingPeriod" defaultValue={subscription?.billingPeriod ?? 'MONTHLY'}>
-              <option value="">One-time</option>
+              <option value="">Not applicable to one-time fees</option>
               <option value="MONTHLY">Monthly</option>
               <option value="TERM">Term</option>
               <option value="YEAR">Year</option>
