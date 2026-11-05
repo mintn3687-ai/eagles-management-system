@@ -12,6 +12,7 @@ import {
   listAnalyticsMembers,
 } from '@/lib/attendance-analytics'
 import { analyticsDirectionSchema, analyticsMonthSchema, analyticsSortSchema } from '@/lib/validation/analytics'
+import { MemberAttendanceCharts } from '@/components/admin/member-attendance-charts'
 import { z } from 'zod'
 
 type SearchParams = { month?: string | string[]; sort?: string | string[]; direction?: string | string[]; page?: string | string[] }
@@ -91,6 +92,8 @@ export default async function AdminAnalyticsPage({ searchParams }: { searchParam
       <article className="card"><p className="text-sm text-amber-800">Excused</p><p className="mt-2 text-3xl font-semibold text-amber-900">{excused}</p></article>
       <article className="card"><p className="text-sm text-rose-800">Missed (unexcused / no response)</p><p className="mt-2 text-3xl font-semibold text-rose-900">{missed}</p></article>
     </section>
+
+    <MemberAttendanceCharts rows={rows} monthLabel={formatAnalyticsMonth(month)} />
 
     <section className="card">
       <h2>Six-month attendance trend</h2>
