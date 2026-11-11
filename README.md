@@ -212,10 +212,11 @@ The attendance window closes at the rehearsal's configured end time in
 `Africa/Nairobi`; members must submit check-in or an absence reason by then.
 Unanswered records are automatically marked absent, and both the scheduled
 cutoff and a committee closing the session lock present marking. The protected
-`/api/cron/close-rehearsals` job runs every minute and uses `CRON_SECRET`; the
-backend also enforces the end-time cutoff if the job is delayed. Deployments
-must use a scheduler that supports minute-level runs (such as a Vercel plan
-that supports this cron frequency) for unattended absence finalization.
+`/api/cron/close-rehearsals` job runs daily at 20:59 UTC (23:59
+`Africa/Nairobi`) and uses `CRON_SECRET`, which is compatible with Vercel Hobby's
+daily cron limit. The backend enforces the exact end-time cutoff even if this
+daily job has not run yet; unattended records are finalized by the scheduled job
+at the end of the rehearsal's local calendar day.
 
 ## API Endpoints
 
