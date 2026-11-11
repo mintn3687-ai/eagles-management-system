@@ -59,7 +59,7 @@ export const absencesRepository = {
   lockRehearsal: (tx: Transaction, rehearsalId: string) => lockRow(tx, 'Rehearsal', rehearsalId),
   lockMember: (tx: Transaction, memberId: string) => lockRow(tx, 'Member', memberId),
   findRehearsalStatus: (tx: Transaction, rehearsalId: string) =>
-    tx.rehearsal.findUnique({ where: { id: rehearsalId }, select: { status: true } }),
+    tx.rehearsal.findUnique({ where: { id: rehearsalId }, select: { status: true, date: true, endTime: true } }),
   findMemberStatus: (tx: Transaction, memberId: string) =>
     tx.member.findUnique({ where: { id: memberId }, select: { status: true } }),
   findAttendance: (tx: Transaction, attendanceId: string) =>

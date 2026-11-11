@@ -22,7 +22,6 @@ export async function saveClubSettingsAction(_state: AdminActionState, form: For
     const parsed = clubSettingsSchema.safeParse({
       clubName: form.get('clubName'),
       attendanceThreshold: form.get('attendanceThreshold'),
-      absenceDeadlineHours: form.get('absenceDeadlineHours'),
       graceDays: form.get('graceDays'),
       subscriptionBillingPeriod: form.get('subscriptionBillingPeriod'),
     })

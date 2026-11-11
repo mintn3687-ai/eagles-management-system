@@ -13,6 +13,6 @@ export function SessionControls({ rehearsalId, state = 'scheduled', checkInCode 
       {checkInCode && <CheckInQrCode rehearsalId={rehearsalId} code={checkInCode} />}
     </>)}
     {state === 'scheduled' && (<form action={openAction}><input type="hidden" name="rehearsalId" value={rehearsalId} /><button type="submit" className="btn-primary">Open session</button>{openState.error && <p className="error" role="alert">{openState.error}</p>}{openState.checkInCode && <p role="status" className="text-emerald-800">Session opened. Code: {openState.checkInCode}</p>}</form>)}
-    {state === 'open' && (<form action={closeAction}><input type="hidden" name="rehearsalId" value={rehearsalId} /><button type="submit" className="btn-secondary" disabled={closeState.success}>Close session</button>{closeState.error && <p className="error" role="alert">{closeState.error}</p>}{closeState.createdRows !== undefined && <p role="status" className="text-emerald-800">Session closed. {closeState.createdRows} members marked as no-response.</p>}</form>)}
+    {state === 'open' && (<form action={closeAction}><input type="hidden" name="rehearsalId" value={rehearsalId} /><button type="submit" className="btn-secondary" disabled={closeState.success}>Close session</button>{closeState.error && <p className="error" role="alert">{closeState.error}</p>}{closeState.markedAbsent !== undefined && <p role="status" className="text-emerald-800">Session closed. {closeState.markedAbsent} members who did not respond were marked absent.</p>}</form>)}
   </section>
 }

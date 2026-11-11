@@ -3,6 +3,8 @@ import { writeAuditLog } from '@/lib/audit'
 import { absencesRepository } from './repository'
 import type { AbsenceFilters } from './schema'
 import { AbsenceError } from './errors'
+import { attendanceWindowClosed } from '@/lib/attendance-rules'
+import { nairobiDateKey, parseNairobiDate } from '@/lib/dates'
 
 export type AbsenceListItem = Awaited<ReturnType<typeof listAbsences>>['records'][number]
 export type ReviewAction = 'EXCUSE' | 'UNEXCUSE' | 'MARK_PRESENT'
@@ -28,8 +30,12 @@ async function reviewOne(
   await absencesRepository.lockRehearsal(tx, context.rehearsalId)
   await absencesRepository.lockMember(tx, context.memberId)
   const rehearsal = await absencesRepository.findRehearsalStatus(tx, context.rehearsalId)
-  if (action === 'MARK_PRESENT' && rehearsal?.status === 'CANCELLED') {
-    throw new AbsenceError('Cancelled rehearsals cannot be marked.')
+  if (action === 'MARK_PRESENT' && rehearsal?.status === 'CANCELLED') throw new AbsenceError('Cancelled rehearsals cannot be marked.')
+  if (action === 'MARK_PRESENT' && (
+    rehearsal?.status === 'CLOSED'
+    || (rehearsal && attendanceWindowClosed(parseNairobiDate(nairobiDateKey(rehearsal.date), rehearsal.endTime)))
+  )) {
+    throw new AbsenceError('Attendance is closed. No one can be marked present after the scheduled rehearsal end time.')
   }
   if (action === 'MARK_PRESENT') {
     const member = await absencesRepository.findMemberStatus(tx, context.memberId)
@@ -37,6 +43,12 @@ async function reviewOne(
   }
   const attendance = await absencesRepository.findAttendance(tx, attendanceId)
   if (!attendance) throw new AbsenceError('Record not found.')
+  if (action === 'MARK_PRESENT' && (
+    rehearsal?.status === 'CLOSED'
+    || (rehearsal && attendanceWindowClosed(parseNairobiDate(nairobiDateKey(rehearsal.date), rehearsal.endTime)))
+  )) {
+    throw new AbsenceError('Attendance is closed. No one can be marked present after the scheduled rehearsal end time.')
+  }
   if (attendance.status === 'PRESENT') throw new AbsenceError('Present records cannot be reviewed.')
   if (attendance.reviewStatus !== 'PENDING') throw new AbsenceError('This record has already been reviewed.')
   if (action === 'MARK_PRESENT' && attendance.status !== 'NO_RESPONSE') {

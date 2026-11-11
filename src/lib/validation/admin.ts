@@ -9,7 +9,6 @@ const wholeNumber = (minimum: number, maximum: number) => z.preprocess(
 export const clubSettingsSchema = z.object({
   clubName: z.string().trim().min(2, 'Enter a club name.').max(80),
   attendanceThreshold: wholeNumber(0, 100),
-  absenceDeadlineHours: wholeNumber(0, 720),
   graceDays: wholeNumber(0, 90),
   subscriptionBillingPeriod: z.enum(['MONTHLY', 'TERM', 'YEAR']),
 }).strict()

@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/close-rehearsals",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/push-reminders",
       "schedule": "0 6 * * *"
     }

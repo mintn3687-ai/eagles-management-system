@@ -14,32 +14,35 @@ type Rehearsal = {
 
 type Member = {
   id: string; fullName: string; phone: string; joinedAt: Date; status: MemberStatus
-  rehearsals: { id: string; status: 'PRESENT' | 'ABSENT' | 'NO_RESPONSE'; markedBy: 'SELF' | 'COMMITTEE'; checkedInAt: Date | null; reason: string | null; reviewStatus: 'NONE' | 'PENDING' | 'EXCUSED' | 'UNEXCUSED' }[]
+  rehearsals: { id: string; status: 'PRESENT' | 'ABSENT' | 'NO_RESPONSE'; markedBy: 'SELF' | 'COMMITTEE' | 'SYSTEM'; checkedInAt: Date | null; reason: string | null; reviewStatus: 'NONE' | 'PENDING' | 'EXCUSED' | 'UNEXCUSED' }[]
 }
 
-export function AttendanceSheet({ rehearsal, members, totalMembers, page, pageCount }: { rehearsal: Rehearsal; members: Member[]; totalMembers: number; page: number; pageCount: number }) {
+export function AttendanceSheet({ rehearsal, members, totalMembers, page, pageCount, locked = false }: { rehearsal: Rehearsal; members: Member[]; totalMembers: number; page: number; pageCount: number; locked?: boolean }) {
   const [state, action] = useActionState(setManualAttendanceAction, {})
   return <section className="card">
     <h2>Attendance sheet</h2>
+    {locked && <p role="status" className="rounded-lg bg-amber-50 p-3 text-amber-900">Attendance is locked. No one can be marked present after the scheduled rehearsal end time.</p>}
     {state.error && <p role="alert" className="error">{state.error}</p>}
     {state.success && <p role="status">Attendance saved.</p>}
+    <p className="text-sm text-slate-600">Attendance closes automatically at {rehearsal.endTime} Nairobi time.</p>
     <p className="mb-4 text-sm text-slate-500">{totalMembers} members · Page {page} of {pageCount}.</p>
     <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
       <table className="w-full min-w-[600px] text-left text-sm">
         <thead className="bg-stone-100">
-          <tr>{['Member', 'Phone', 'Attendance', 'Checked in', 'Marked by', 'Review', ''].map((h) => <th className="p-3" key={h}>{h || ' '}</th>)}</tr>
+          <tr>{['Member', 'Phone', 'Attendance', 'Reason', 'Checked in', 'Marked by', 'Review', ''].map((h) => <th className="p-3" key={h}>{h || ' '}</th>)}</tr>
         </thead>
         <tbody>
           {members.map((m) => (
             <tr className="border-t" key={m.id}>
               <td className="p-3">{m.fullName}{m.status !== 'ACTIVE' && <span className="block text-xs text-slate-500">Not currently active</span>}</td>
               <td className="p-3">{m.phone}</td>
-              <td className="p-3">{m.rehearsals[0]?.status.replaceAll('_', ' ') ?? 'No response'}</td>
+              <td className="p-3">{m.rehearsals[0]?.status === 'NO_RESPONSE' ? 'Pending' : m.rehearsals[0]?.status.replaceAll('_', ' ') ?? 'Pending'}</td>
+              <td className="p-3">{m.rehearsals[0]?.reason ?? '—'}</td>
               <td className="p-3">{m.rehearsals[0]?.checkedInAt ? formatNairobiTime(m.rehearsals[0].checkedInAt) : '—'}</td>
               <td className="p-3">{m.rehearsals[0]?.markedBy ?? '—'}</td>
               <td className="p-3">{m.rehearsals[0]?.reviewStatus.replace('_', ' ') ?? '—'}</td>
               <td className="p-3">
-                {m.status === 'ACTIVE' && <form action={action} className="flex items-center gap-2">
+                {!locked && m.status === 'ACTIVE' && <form action={action} className="flex items-center gap-2">
                   <input type="hidden" name="rehearsalId" value={rehearsal.id} />
                   <input type="hidden" name="memberId" value={m.id} />
                   <select className="input h-auto w-24 text-sm" name="status">
@@ -52,7 +55,7 @@ export function AttendanceSheet({ rehearsal, members, totalMembers, page, pageCo
               </td>
             </tr>
           ))}
-          {!members.length && <tr><td className="p-6" colSpan={7}>No active members or recorded attendance for this rehearsal.</td></tr>}
+          {!members.length && <tr><td className="p-6" colSpan={8}>No active members or recorded attendance for this rehearsal.</td></tr>}
         </tbody>
       </table>
     </div>

@@ -39,6 +39,7 @@ enum AttendanceStatus {
 enum MarkedBy {
   SELF
   COMMITTEE
+  SYSTEM
 }
 
 enum ReviewStatus {

@@ -35,7 +35,11 @@ describe('absence review service', () => {
     vi.clearAllMocks()
     mocks.transaction.mockImplementation(async (work) => work({}))
     mocks.findContext.mockResolvedValue({ rehearsalId: 'rehearsal-1', memberId: 'member-1' })
-    mocks.findRehearsalStatus.mockResolvedValue({ status: 'CLOSED' })
+    mocks.findRehearsalStatus.mockResolvedValue({
+      status: 'OPEN',
+      date: new Date('2030-01-01T00:00:00.000Z'),
+      endTime: '19:00',
+    })
     mocks.findMemberStatus.mockResolvedValue({ status: 'ACTIVE' })
     mocks.findAttendance.mockResolvedValue({
       id: 'attendance-1', status: 'NO_RESPONSE', reviewStatus: 'PENDING',
@@ -63,6 +67,18 @@ describe('absence review service', () => {
     await expect(reviewSingle({
       attendanceId: 'attendance-1', action: 'MARK_PRESENT', note: 'Verified at rehearsal',
     }, 'actor-1')).rejects.toBeInstanceOf(AbsenceError)
+    expect(mocks.updateAttendance).not.toHaveBeenCalled()
+  })
+
+  it('rejects committee marking present after a rehearsal is closed', async () => {
+    mocks.findRehearsalStatus.mockResolvedValue({
+      status: 'CLOSED',
+      date: new Date('2030-01-01T00:00:00.000Z'),
+      endTime: '19:00',
+    })
+    await expect(reviewSingle({
+      attendanceId: 'attendance-1', action: 'MARK_PRESENT', note: 'Verified at rehearsal',
+    }, 'actor-1')).rejects.toThrow('Attendance is closed.')
     expect(mocks.updateAttendance).not.toHaveBeenCalled()
   })
 })

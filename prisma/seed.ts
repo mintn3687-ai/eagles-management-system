@@ -87,7 +87,7 @@ async function main() {
       { id: 'example-subscription-fee', type: 'SUBSCRIPTION', amount: 200, billingPeriod: 'MONTHLY',
         effectiveFrom: parseNairobiDate('2026-10-01'), reason: 'EXAMPLE ONLY: monthly subscription, KES 200', createdById: admin.id },
     ] })
-    for (const [key, value] of Object.entries({ clubName: 'Eagles Drama Club', timezone: 'Africa/Nairobi', currency: 'KES', absenceDeadlineHours: 48, attendanceThreshold: 60 })) {
+    for (const [key, value] of Object.entries({ clubName: 'Eagles Drama Club', timezone: 'Africa/Nairobi', currency: 'KES', attendanceThreshold: 60 })) {
       await tx.setting.upsert({ where: { key }, update: {}, create: { key, value } })
     }
   }, { timeout: 30000 })

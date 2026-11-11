@@ -16,6 +16,10 @@ export function evaluateCheckInAttempt(input: {
   return input.submittedCode === input.correctCode ? 'PRESENT' : 'WRONG_CODE'
 }
 
+export function attendanceWindowClosed(end: Date, now = new Date()) {
+  return now.getTime() >= end.getTime()
+}
+
 export function absenceDeadlinePassed(end: Date, deadlineHours: number, now = new Date()) {
   return now.getTime() > end.getTime() + deadlineHours * 60 * 60 * 1000
 }

@@ -9,7 +9,7 @@ import { userIdSchema } from '../validation'
 import { rehearsalCreateSchema, rehearsalEditSchema, checkInCodeSchema, attendReasonSchema, weeklyGenerateSchema } from '../validation/rehearsals'
 import { nairobiDateKey, parseNairobiDate } from '../dates'
 import { consumeRateLimit } from '../rate-limit'
-import { absenceDeadlinePassed, evaluateCheckInAttempt } from '../attendance-rules'
+import { attendanceWindowClosed, evaluateCheckInAttempt } from '../attendance-rules'
 
 export class RehearsalError extends Error {}
 export function rehearsalErrorMessage(error: unknown): string {
@@ -23,32 +23,112 @@ export type RehearsalInput = z.infer<typeof rehearsalCreateSchema>
 export type RehearsalEditInput = z.infer<typeof rehearsalEditSchema>
 export type WeeklyGenInput = z.infer<typeof weeklyGenerateSchema>
 
-async function getAbsenceDeadlineHours(): Promise<number> {
-  const setting = await prisma.setting.findUnique({ where: { key: 'absenceDeadlineHours' }, select: { value: true } })
-  const value = setting?.value
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 48
+function rehearsalCutoff(date: Date, endTime: string) {
+  return parseNairobiDate(nairobiDateKey(date), endTime)
+}
+
+async function createPendingAttendance(tx: Prisma.TransactionClient, rehearsal: {
+  id: string
+  date: Date
+  startTime: string
+}) {
+  const members = await tx.member.findMany({
+    where: {
+      status: 'ACTIVE',
+      joinedAt: { lte: rehearsalCutoff(rehearsal.date, rehearsal.startTime) },
+    },
+    select: { id: true },
+  })
+  if (!members.length) return 0
+  const result = await tx.attendance.createMany({
+    data: members.map(({ id }) => ({
+      rehearsalId: rehearsal.id,
+      memberId: id,
+      status: 'NO_RESPONSE',
+      markedBy: 'SYSTEM',
+      reviewStatus: 'NONE',
+    })),
+    skipDuplicates: true,
+  })
+  return result.count
+}
+
+async function closeAndMarkAbsent(
+  tx: Prisma.TransactionClient,
+  rehearsal: { id: string },
+  actorId: string,
+  closedAt: Date,
+  by: 'SYSTEM' | 'COMMITTEE',
+) {
+  await tx.rehearsal.update({
+    where: { id: rehearsal.id },
+    data: { status: 'CLOSED', checkInCode: null },
+  })
+  const unanswered = await tx.attendance.findMany({
+    where: { rehearsalId: rehearsal.id, status: 'NO_RESPONSE' },
+    select: { id: true, memberId: true },
+  })
+  if (unanswered.length) {
+    await tx.attendance.updateMany({
+      where: { rehearsalId: rehearsal.id, status: 'NO_RESPONSE' },
+      data: {
+        status: 'ABSENT',
+        markedBy: 'SYSTEM',
+        markedAt: closedAt,
+        checkedInAt: null,
+        reviewStatus: 'NONE',
+      },
+    })
+    await tx.auditLog.createMany({
+      data: unanswered.map(({ id, memberId }) => ({
+        actorId,
+        action: 'ATTENDANCE_AUTO_MARKED_ABSENT',
+        entity: 'Attendance',
+        entityId: id,
+        details: { rehearsalId: rehearsal.id, memberId, by: 'SYSTEM', reason: 'No attendance response before the rehearsal cutoff.' },
+      })),
+    })
+  }
+  await tx.auditLog.create({
+    data: {
+      actorId,
+      action: 'SESSION_CLOSED',
+      entity: 'Rehearsal',
+      entityId: rehearsal.id,
+      details: { by, markedAbsent: unanswered.length },
+    },
+  })
+  return unanswered.length
 }
 
 export async function createRehearsal(input: unknown): Promise<{ rehearsalId: string }> {
   const actor = await requireRole('COMMITTEE')
   const data = rehearsalCreateSchema.parse(input)
   const date = parseNairobiDate(data.date)
-  const rehearsal = await prisma.rehearsal.create({
-    data: {
-      title: data.title,
-      date,
-      startTime: data.startTime,
-      endTime: data.endTime,
-      venue: data.venue,
-      status: 'SCHEDULED',
-      createdById: actor.id,
-    },
+  return prisma.$transaction(async (tx) => {
+    const rehearsal = await tx.rehearsal.create({
+      data: {
+        title: data.title,
+        date,
+        startTime: data.startTime,
+        endTime: data.endTime,
+        venue: data.venue,
+        status: 'SCHEDULED',
+        createdById: actor.id,
+      },
+    })
+    const pendingRows = await createPendingAttendance(tx, rehearsal)
+    await tx.auditLog.create({
+      data: {
+        actorId: actor.id,
+        action: 'REHEARSAL_CREATED',
+        entity: 'Rehearsal',
+        entityId: rehearsal.id,
+        details: { date: nairobiDateKey(date), pendingRows },
+      },
+    })
+    return { rehearsalId: rehearsal.id }
   })
-  await prisma.auditLog.create({ data: {
-    actorId: actor.id, action: 'REHEARSAL_CREATED', entity: 'Rehearsal', entityId: rehearsal.id,
-    details: { date: nairobiDateKey(date) },
-  } })
-  return { rehearsalId: rehearsal.id }
 }
 
 export async function editRehearsal(id: unknown, input: unknown): Promise<{ rehearsalId: string }> {
@@ -56,22 +136,39 @@ export async function editRehearsal(id: unknown, input: unknown): Promise<{ rehe
   const rehearsalId = userIdSchema.parse(id)
   const data = rehearsalCreateSchema.parse(input)
   const date = parseNairobiDate(data.date)
-  const rehearsal = await prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx) => {
     await lockRow(tx, 'Rehearsal', rehearsalId)
     const existing = await tx.rehearsal.findUnique({ where: { id: rehearsalId } })
     if (!existing) throw new RehearsalError('Rehearsal not found.')
-    if (existing.status === 'CLOSED') throw new RehearsalError('Cannot edit a closed rehearsal.')
-    if (existing.status === 'CANCELLED') throw new RehearsalError('Cannot edit a cancelled rehearsal.')
-    return tx.rehearsal.update({
+    if (existing.status !== 'SCHEDULED') throw new RehearsalError('Only scheduled rehearsals can be edited.')
+    const rehearsal = await tx.rehearsal.update({
       where: { id: rehearsalId },
       data: { title: data.title, date, startTime: data.startTime, endTime: data.endTime, venue: data.venue },
     })
+    await tx.attendance.deleteMany({
+      where: {
+        rehearsalId,
+        status: 'NO_RESPONSE',
+        markedBy: 'SYSTEM',
+        reviewStatus: 'NONE',
+        member: { OR: [
+          { status: { not: 'ACTIVE' } },
+          { joinedAt: { gt: rehearsalCutoff(date, data.startTime) } },
+        ] },
+      },
+    })
+    await createPendingAttendance(tx, rehearsal)
+    await tx.auditLog.create({
+      data: {
+        actorId: actor.id,
+        action: 'REHEARSAL_EDITED',
+        entity: 'Rehearsal',
+        entityId: rehearsalId,
+        details: { title: data.title, date: nairobiDateKey(date) },
+      },
+    })
+    return { rehearsalId: rehearsal.id }
   })
-  await prisma.auditLog.create({ data: {
-    actorId: actor.id, action: 'REHEARSAL_EDITED', entity: 'Rehearsal', entityId: rehearsalId,
-    details: { title: data.title },
-  } })
-  return { rehearsalId: rehearsal.id }
 }
 
 export async function cancelRehearsal(id: unknown, reason: unknown): Promise<void> {
@@ -101,6 +198,9 @@ export async function openSession(rehearsalIdInput: unknown): Promise<{ checkInC
     const rehearsal = await tx.rehearsal.findUnique({ where: { id: rehearsalId } })
     if (!rehearsal) throw new RehearsalError('Rehearsal not found.')
     if (rehearsal.status !== 'SCHEDULED') throw new RehearsalError('Only scheduled rehearsals can be opened.')
+    if (attendanceWindowClosed(rehearsalCutoff(rehearsal.date, rehearsal.endTime))) {
+      throw new RehearsalError('The attendance window is closed. This rehearsal has reached its scheduled end time.')
+    }
     await tx.rehearsal.update({ where: { id: rehearsalId }, data: { status: 'OPEN', checkInCode } })
     await tx.auditLog.create({ data: {
       actorId: actor.id, action: 'SESSION_OPENED', entity: 'Rehearsal', entityId: rehearsalId,
@@ -110,42 +210,50 @@ export async function openSession(rehearsalIdInput: unknown): Promise<{ checkInC
   return { checkInCode }
 }
 
-export async function closeSession(rehearsalIdInput: unknown): Promise<{ createdRows: number }> {
+export async function closeSession(rehearsalIdInput: unknown): Promise<{ markedAbsent: number }> {
   const actor = await requireRole('COMMITTEE')
   const rehearsalId = userIdSchema.parse(rehearsalIdInput)
-  let createdRows = 0
+  let markedAbsent = 0
   await prisma.$transaction(async (tx) => {
     await lockRow(tx, 'Rehearsal', rehearsalId)
     const rehearsal = await tx.rehearsal.findUnique({ where: { id: rehearsalId } })
     if (!rehearsal) throw new RehearsalError('Rehearsal not found.')
     if (rehearsal.status !== 'OPEN') throw new RehearsalError('Only open sessions can be closed.')
-    await tx.rehearsal.update({ where: { id: rehearsalId }, data: { status: 'CLOSED', checkInCode: null } })
-    const members = await tx.member.findMany({
-      where: {
-        status: 'ACTIVE',
-        joinedAt: { lte: parseNairobiDate(nairobiDateKey(rehearsal.date), rehearsal.startTime) },
-        rehearsals: { none: { rehearsalId } },
-      },
-      select: { id: true },
-    })
-    const result = await tx.attendance.createMany({
-      data: members.map((m) => ({
-        rehearsalId,
-        memberId: m.id,
-        status: 'NO_RESPONSE',
-        markedBy: 'SELF',
-        reviewStatus: 'PENDING',
-      })),
-      skipDuplicates: true,
-    })
-    createdRows = result.count
-    await tx.attendance.updateMany({ where: { rehearsalId, status: 'NO_RESPONSE', reviewStatus: 'NONE' }, data: { reviewStatus: 'PENDING' } })
-    await tx.auditLog.create({ data: {
-      actorId: actor.id, action: 'SESSION_CLOSED', entity: 'Rehearsal', entityId: rehearsalId,
-      details: { createdRows },
-    } })
+    await createPendingAttendance(tx, rehearsal)
+    markedAbsent = await closeAndMarkAbsent(tx, rehearsal, actor.id, new Date(), 'COMMITTEE')
   })
-  return { createdRows }
+  return { markedAbsent }
+}
+
+export async function finalizeDueRehearsals(now = new Date()): Promise<{ closedRehearsals: number; markedAbsent: number }> {
+  const candidates = await prisma.rehearsal.findMany({
+    where: {
+      status: { in: ['SCHEDULED', 'OPEN'] },
+      date: { lte: parseNairobiDate(nairobiDateKey(now)) },
+    },
+    select: { id: true, date: true, endTime: true },
+    orderBy: [{ date: 'asc' }, { id: 'asc' }],
+    take: 200,
+  })
+  const due = candidates.filter(({ date, endTime }) => attendanceWindowClosed(rehearsalCutoff(date, endTime), now))
+  let closedRehearsals = 0
+  let markedAbsent = 0
+  for (const candidate of due) {
+    const result = await prisma.$transaction(async (tx) => {
+      await lockRow(tx, 'Rehearsal', candidate.id)
+      const rehearsal = await tx.rehearsal.findUnique({ where: { id: candidate.id } })
+      if (!rehearsal || (rehearsal.status !== 'SCHEDULED' && rehearsal.status !== 'OPEN')) return null
+      if (!attendanceWindowClosed(rehearsalCutoff(rehearsal.date, rehearsal.endTime), now)) return null
+      await createPendingAttendance(tx, rehearsal)
+      const count = await closeAndMarkAbsent(tx, rehearsal, rehearsal.createdById, now, 'SYSTEM')
+      return count
+    })
+    if (result !== null) {
+      closedRehearsals += 1
+      markedAbsent += result
+    }
+  }
+  return { closedRehearsals, markedAbsent }
 }
 
 export async function setManualAttendance(rehearsalIdInput: unknown, memberIdInput: unknown, status: unknown, noteInput: unknown = undefined): Promise<void> {
@@ -160,6 +268,9 @@ export async function setManualAttendance(rehearsalIdInput: unknown, memberIdInp
     const rehearsal = await tx.rehearsal.findUnique({ where: { id: rehearsalId } })
     if (!rehearsal) throw new RehearsalError('Rehearsal not found.')
     if (rehearsal.status === 'CANCELLED') throw new RehearsalError('Cannot mark attendance for a cancelled rehearsal.')
+    if (rehearsal.status === 'CLOSED' || attendanceWindowClosed(rehearsalCutoff(rehearsal.date, rehearsal.endTime))) {
+      throw new RehearsalError('Attendance is closed. No one can be marked present after the scheduled end time.')
+    }
     await lockRow(tx, 'Member', memberId)
     const member = await tx.member.findUnique({ where: { id: memberId } })
     if (!member) throw new RehearsalError('Member not found.')
@@ -168,6 +279,9 @@ export async function setManualAttendance(rehearsalIdInput: unknown, memberIdInp
       where: { rehearsalId_memberId: { rehearsalId, memberId } },
       select: { id: true, status: true, checkedInAt: true },
     })
+    if (attendanceWindowClosed(rehearsalCutoff(rehearsal.date, rehearsal.endTime))) {
+      throw new RehearsalError('Attendance is closed. No one can be marked present after the scheduled end time.')
+    }
     if (existing?.status === 'NO_RESPONSE' && newStatus === 'PRESENT' && !note) throw new RehearsalError('A note is required when changing NO_RESPONSE to PRESENT.')
     const review = { reviewStatus: newStatus === 'PRESENT' ? 'NONE' as const : 'PENDING' as const, reviewNote: note || null, reviewedById: newStatus === 'PRESENT' && note ? actor.id : null, reviewedAt: newStatus === 'PRESENT' && note ? new Date() : null }
     const markedAt = new Date()
@@ -228,13 +342,19 @@ export async function generateWeekly(options: unknown, venue: unknown): Promise<
           venue: venueStr, status: 'SCHEDULED', createdById: actor.id,
         },
       })
+      await createPendingAttendance(tx, rehearsal)
       created.push(rehearsal.id)
     }
+    await tx.auditLog.create({
+      data: {
+        actorId: actor.id,
+        action: 'REHEARSALS_GENERATED_WEEKLY',
+        entity: 'Rehearsal',
+        entityId: 'batch',
+        details: { count: created.length, weekday: data.weekday, venue: venueStr },
+      },
+    })
   })
-  await prisma.auditLog.create({ data: {
-    actorId: actor.id, action: 'REHEARSALS_GENERATED_WEEKLY', entity: 'Rehearsal', entityId: 'batch',
-    details: { count: created.length, weekday: data.weekday, venue: venueStr },
-  } })
   return { created }
 }
 
@@ -286,6 +406,9 @@ export async function markSelfPresent(rehearsalIdInput: unknown, code: unknown) 
   if (!rate.allowed) throw new RehearsalError('Too many check-in attempts. Please wait and try again.')
   const error = await prisma.$transaction(async (tx) => {
     const rehearsal = await lockAttendanceContext(tx, rehearsalId, memberId)
+    if (attendanceWindowClosed(rehearsalCutoff(rehearsal.date, rehearsal.endTime))) {
+      throw new RehearsalError('The attendance window is closed. Check-in ended at the scheduled rehearsal end time.')
+    }
     if (rehearsal.status !== 'OPEN') throw new RehearsalError('This session is not open for check-in.')
     const where = { rehearsalId_memberId: { rehearsalId, memberId } }
     const existing = await tx.attendance.findUnique({ where })
@@ -305,9 +428,21 @@ export async function markSelfPresent(rehearsalIdInput: unknown, code: unknown) 
       // Return instead of throwing: failed attempts must commit.
       return (existing?.wrongCodeTries ?? 0) + 1 === 5 ? 'Wrong code. You have used all 5 attempts.' : 'Wrong code. Check the projected number and try again.'
     }
+    if (attendanceWindowClosed(rehearsalCutoff(rehearsal.date, rehearsal.endTime))) {
+      throw new RehearsalError('The attendance window is closed. Check-in ended at the scheduled rehearsal end time.')
+    }
     const checkedInAt = new Date()
     const data = { status: 'PRESENT' as const, markedBy: 'SELF' as const, markedAt: checkedInAt, checkedInAt, reason: null, reviewStatus: 'NONE' as const, reviewNote: null, reviewedById: null, reviewedAt: null }
-    await tx.attendance.upsert({ where, create: { rehearsalId, memberId, ...data }, update: data })
+    const saved = await tx.attendance.upsert({ where, create: { rehearsalId, memberId, ...data }, update: data })
+    await tx.auditLog.create({
+      data: {
+        actorId: user.id,
+        action: 'ATTENDANCE_MARKED',
+        entity: 'Attendance',
+        entityId: saved.id,
+        details: { rehearsalId, memberId, previousStatus: existing?.status ?? null, status: 'PRESENT', by: 'SELF' },
+      },
+    })
     return null
   })
   if (error) throw new RehearsalError(error)
@@ -319,16 +454,28 @@ export async function markSelfAbsent(rehearsalIdInput: unknown, reason: unknown)
   const memberId = user.member.id
   const rehearsalId = userIdSchema.parse(rehearsalIdInput)
   const text = attendReasonSchema.parse(reason)
-  const deadlineHours = await getAbsenceDeadlineHours()
   await prisma.$transaction(async (tx) => {
     const rehearsal = await lockAttendanceContext(tx, rehearsalId, memberId)
-    const end = parseNairobiDate(nairobiDateKey(rehearsal.date), rehearsal.endTime)
-    if (absenceDeadlinePassed(end, deadlineHours)) throw new RehearsalError('The absence submission deadline has passed.')
+    if (rehearsal.status === 'CLOSED' || attendanceWindowClosed(rehearsalCutoff(rehearsal.date, rehearsal.endTime))) {
+      throw new RehearsalError('The attendance window is closed. Absence reasons must be submitted by the scheduled rehearsal end time.')
+    }
     const where = { rehearsalId_memberId: { rehearsalId, memberId } }
     const existing = await tx.attendance.findUnique({ where })
-    if (existing && existing.status !== 'NO_RESPONSE') throw new RehearsalError('You have already marked attendance. Only absent to present is allowed while OPEN.')
+    if (existing && existing.status !== 'NO_RESPONSE') throw new RehearsalError('You have already submitted attendance.')
+    if (attendanceWindowClosed(rehearsalCutoff(rehearsal.date, rehearsal.endTime))) {
+      throw new RehearsalError('The attendance window is closed. Absence reasons must be submitted by the scheduled rehearsal end time.')
+    }
     const data = { status: 'ABSENT' as const, markedBy: 'SELF' as const, markedAt: new Date(), reason: text, reviewStatus: 'PENDING' as const, reviewNote: null, reviewedById: null, reviewedAt: null }
-    await tx.attendance.upsert({ where, create: { rehearsalId, memberId, ...data }, update: data })
+    const saved = await tx.attendance.upsert({ where, create: { rehearsalId, memberId, ...data }, update: data })
+    await tx.auditLog.create({
+      data: {
+        actorId: user.id,
+        action: 'ABSENCE_REASON_SUBMITTED',
+        entity: 'Attendance',
+        entityId: saved.id,
+        details: { rehearsalId, memberId, reason: text, by: 'SELF' },
+      },
+    })
   })
 }
 
@@ -401,10 +548,11 @@ export async function getMemberRehearsal(input: unknown) {
   const rehearsal = await prisma.rehearsal.findUnique({ where: { id }, select: { id: true, title: true, date: true, startTime: true, endTime: true, venue: true, status: true } })
   if (!rehearsal) return null
   const attendance = await prisma.attendance.findUnique({ where: { rehearsalId_memberId: { rehearsalId: id, memberId: user.member.id } } })
-  const end = parseNairobiDate(nairobiDateKey(rehearsal.date), rehearsal.endTime)
+  const end = rehearsalCutoff(rehearsal.date, rehearsal.endTime)
+  const windowClosed = attendanceWindowClosed(end)
   const active = user.member.status === 'ACTIVE'
-  return { rehearsal, attendance, past: Date.now() > end.getTime(),
-    canPresent: active && rehearsal.status === 'OPEN' && attendance?.status !== 'PRESENT',
-    canAbsent: active && rehearsal.status !== 'CANCELLED' && (!attendance || attendance.status === 'NO_RESPONSE') && Date.now() <= end.getTime() + (await getAbsenceDeadlineHours()) * 3600000,
+  return { rehearsal, attendance, past: Date.now() >= end.getTime(), attendanceClosed: rehearsal.status === 'CLOSED' || windowClosed,
+    canPresent: active && rehearsal.status === 'OPEN' && !windowClosed && attendance?.status !== 'PRESENT',
+    canAbsent: active && rehearsal.status !== 'CANCELLED' && rehearsal.status !== 'CLOSED' && !windowClosed && (!attendance || attendance.status === 'NO_RESPONSE'),
   }
 }

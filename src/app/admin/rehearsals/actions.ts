@@ -5,7 +5,7 @@ import {
   setManualAttendance, previewWeekly, generateWeekly, rehearsalErrorMessage,
 } from '@/lib/rehearsals/service'
 
-export type RehearsalFormState = { error?: string; success?: boolean; checkInCode?: string; createdRows?: number }
+export type RehearsalFormState = { error?: string; success?: boolean; checkInCode?: string; markedAbsent?: number }
 export type WeeklyPreviewState = { error?: string; preview?: { weekday: string; time: string; dates: string[] }; venue?: string; created?: string[]; weekday?: string; startTime?: string; endTime?: string; startDate?: string; endDate?: string }
 
 function rehearsalForm(from: FormData) {
@@ -73,7 +73,7 @@ export async function closeSessionAction(_state: RehearsalFormState, form: FormD
     revalidatePath(`/admin/rehearsals/${form.get('rehearsalId')}`)
     revalidatePath('/admin', 'layout')
     revalidatePath('/member', 'layout')
-    return { success: true, createdRows: result.createdRows }
+    return { success: true, markedAbsent: result.markedAbsent }
   } catch (error) { return { error: rehearsalErrorMessage(error) } }
 }
 

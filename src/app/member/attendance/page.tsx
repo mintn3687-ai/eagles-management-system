@@ -20,6 +20,8 @@ export default async function MemberAttendancePage({ searchParams }: { searchPar
       <p>Session: {result.rehearsal.status}. Your attendance: {result.attendance?.status.replaceAll('_', ' ') ?? 'Not marked'}.</p>
       {result.canPresent && <CheckInForm rehearsalId={result.rehearsal.id} />}
       {result.canAbsent && <AbsentForm rehearsalId={result.rehearsal.id} past={result.past} />}
+      {result.attendanceClosed && <p role="status" className="rounded-lg bg-amber-50 p-3 text-amber-900">Attendance is closed. Members and committee cannot change this rehearsal to present after its scheduled end time.</p>}
+      {result.attendance?.reason && <p>Absence reason: {result.attendance.reason}</p>}
       {result.attendance?.reviewNote && <p>Committee note: {result.attendance.reviewNote}</p>}
     </section> : <p>No rehearsal selected.</p>}
     <Link className="btn-secondary" href="/member/history">Attendance history</Link>

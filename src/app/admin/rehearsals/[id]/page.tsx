@@ -2,7 +2,8 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { pageUser } from '@/lib/page-access'
 import { userIdSchema } from '@/lib/validation'
-import { formatNairobiDate } from '@/lib/dates'
+import { formatNairobiDate, nairobiDateKey, parseNairobiDate } from '@/lib/dates'
+import { attendanceWindowClosed } from '@/lib/attendance-rules'
 import { AttendanceSheet } from '@/components/rehearsals/attendance-sheet'
 import { EditRehearsalForm } from '@/components/rehearsals/edit-form'
 import { SessionControls } from '@/components/rehearsals/session-controls'
@@ -24,6 +25,8 @@ export default async function RehearsalDetailPage({ params, searchParams }: { pa
   const pageCount = Math.max(1, Math.ceil(totalMembers / PAGE_SIZE))
   const page = Math.min(requestedPage, pageCount)
   const members = await adminReadService.attendanceSheetMembers(rehearsal.id, page, PAGE_SIZE)
+  const attendanceLocked = rehearsal.status === 'CLOSED' || rehearsal.status === 'CANCELLED'
+    || attendanceWindowClosed(parseNairobiDate(nairobiDateKey(rehearsal.date), rehearsal.endTime))
   return <div className="space-y-6">
     <div>
       <Link className="inline-flex min-h-11 items-center underline" href="/admin/rehearsals">← Rehearsals</Link>
@@ -35,6 +38,6 @@ export default async function RehearsalDetailPage({ params, searchParams }: { pa
     {rehearsal.status === 'OPEN' && <SessionControls rehearsalId={rehearsal.id} state="open" checkInCode={rehearsal.checkInCode} />}
     {rehearsal.status === 'SCHEDULED' && <EditRehearsalForm rehearsal={rehearsal} />}
     {rehearsal.status !== 'CANCELLED' && <CancelRehearsalForm rehearsalId={rehearsal.id} />}
-    <AttendanceSheet rehearsal={rehearsal} members={members} totalMembers={totalMembers} page={page} pageCount={pageCount} />
+    <AttendanceSheet rehearsal={rehearsal} members={members} totalMembers={totalMembers} page={page} pageCount={pageCount} locked={attendanceLocked} />
   </div>
 }
