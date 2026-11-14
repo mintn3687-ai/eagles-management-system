@@ -268,7 +268,7 @@ export async function setManualAttendance(rehearsalIdInput: unknown, memberIdInp
     const rehearsal = await tx.rehearsal.findUnique({ where: { id: rehearsalId } })
     if (!rehearsal) throw new RehearsalError('Rehearsal not found.')
     if (rehearsal.status === 'CANCELLED') throw new RehearsalError('Cannot mark attendance for a cancelled rehearsal.')
-    if (rehearsal.status === 'CLOSED' || attendanceWindowClosed(rehearsalCutoff(rehearsal.date, rehearsal.endTime))) {
+    if (attendanceWindowClosed(rehearsalCutoff(rehearsal.date, rehearsal.endTime))) {
       throw new RehearsalError('Attendance is closed. No one can be marked present after the scheduled end time.')
     }
     await lockRow(tx, 'Member', memberId)
@@ -282,7 +282,6 @@ export async function setManualAttendance(rehearsalIdInput: unknown, memberIdInp
     if (attendanceWindowClosed(rehearsalCutoff(rehearsal.date, rehearsal.endTime))) {
       throw new RehearsalError('Attendance is closed. No one can be marked present after the scheduled end time.')
     }
-    if (existing?.status === 'NO_RESPONSE' && newStatus === 'PRESENT' && !note) throw new RehearsalError('A note is required when changing NO_RESPONSE to PRESENT.')
     const review = { reviewStatus: newStatus === 'PRESENT' ? 'NONE' as const : 'PENDING' as const, reviewNote: note || null, reviewedById: newStatus === 'PRESENT' && note ? actor.id : null, reviewedAt: newStatus === 'PRESENT' && note ? new Date() : null }
     const markedAt = new Date()
     const checkedInAt = newStatus === 'PRESENT'

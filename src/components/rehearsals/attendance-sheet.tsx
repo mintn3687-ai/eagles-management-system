@@ -49,7 +49,7 @@ export function AttendanceSheet({ rehearsal, members, totalMembers, page, pageCo
                     <option value="PRESENT">Present</option>
                     <option value="ABSENT">Absent</option>
                   </select>
-                  <input name="note" className="input" aria-label="Correction note" placeholder="Note required for no response to present" maxLength={1000} />
+                  <input name="note" className="input" aria-label="Attendance note (optional)" placeholder="Optional note" maxLength={1000} />
                   <SubmitButton>Save</SubmitButton>
                 </form>}
               </td>

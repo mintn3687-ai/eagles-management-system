@@ -231,14 +231,31 @@ describe('rehearsal attendance check-in time', () => {
     expect(mocks.auditCreateMany).toHaveBeenCalled()
   })
 
-  it('rejects committee attendance changes after the rehearsal is closed', async () => {
+  it('allows committee to mark attendance after early session closure but before scheduled end time', async () => {
     mocks.rehearsalFindUnique.mockResolvedValue({
       id: rehearsalId, date: new Date('2030-01-01T00:00:00.000Z'), endTime: '19:00', status: 'CLOSED',
     })
 
-    await expect(setManualAttendance(rehearsalId, memberId, 'PRESENT', 'Verified by committee'))
-      .rejects.toThrow('Attendance is closed.')
-    expect(mocks.attendanceUpdate).not.toHaveBeenCalled()
+    await expect(setManualAttendance(rehearsalId, memberId, 'PRESENT')).resolves.toBeUndefined()
+    expect(mocks.attendanceCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: 'PRESENT', markedBy: 'COMMITTEE' }),
+    }))
+  })
+
+  it('allows committee to mark a pending member present without requiring a note', async () => {
+    mocks.rehearsalFindUnique.mockResolvedValue({
+      id: rehearsalId, date: new Date('2030-01-01T00:00:00.000Z'), endTime: '19:00', status: 'OPEN',
+    })
+    mocks.attendanceFindUnique.mockResolvedValue({
+      id: 'attendance-id',
+      status: 'NO_RESPONSE',
+      checkedInAt: null,
+    })
+
+    await expect(setManualAttendance(rehearsalId, memberId, 'PRESENT')).resolves.toBeUndefined()
+    expect(mocks.attendanceUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: 'PRESENT', markedBy: 'COMMITTEE' }),
+    }))
   })
 
   it('rejects committee attendance changes at the exact scheduled end time', async () => {

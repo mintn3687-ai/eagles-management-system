@@ -25,7 +25,7 @@ export default async function RehearsalDetailPage({ params, searchParams }: { pa
   const pageCount = Math.max(1, Math.ceil(totalMembers / PAGE_SIZE))
   const page = Math.min(requestedPage, pageCount)
   const members = await adminReadService.attendanceSheetMembers(rehearsal.id, page, PAGE_SIZE)
-  const attendanceLocked = rehearsal.status === 'CLOSED' || rehearsal.status === 'CANCELLED'
+  const attendanceLocked = rehearsal.status === 'CANCELLED'
     || attendanceWindowClosed(parseNairobiDate(nairobiDateKey(rehearsal.date), rehearsal.endTime))
   return <div className="space-y-6">
     <div>
