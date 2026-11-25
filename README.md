@@ -191,10 +191,11 @@ branch for Vercel. Apply migrations to each intended database only after
 checking which connection is active with `npm run db:migrate`. PayHero remains
 disabled unless explicitly enabled and configured with server-side credentials,
 a channel ID, and a public HTTPS callback URL. If using Vercel
-Preview deployments for sign-in, set `AUTH_URL` to that preview's origin in its
-Preview environment. The app uses relative routes; no production URL should be
-hardcoded into local configuration. Keep all secrets out of GitHub. Never
-commit or expose payment credentials in browser-visible variables.
+Preview deployments use Vercel's `VERCEL_URL` as their Auth.js origin, even if
+the production `AUTH_URL` is also configured for Preview. The app uses relative
+routes; no production URL should be hardcoded into local configuration. Keep all
+secrets out of GitHub. Never commit or expose payment credentials in
+browser-visible variables.
 
 Copy `.env.example` to `.env.local`, then set the local values described above. Use the Vercel project settings for production values; never paste real credentials into this document.
 
