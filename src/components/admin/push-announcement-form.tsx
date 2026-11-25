@@ -36,7 +36,7 @@ export function PushAnnouncementForm() {
     }
   }
 
-  return <section className="card space-y-3">
+  return <section id="push-announcement" className="card space-y-3">
     <div>
       <h2>Send a club notification</h2>
       <p className="text-sm text-slate-600">Sends a general update to all active accounts that enabled notifications. The device message won’t include private details.</p>

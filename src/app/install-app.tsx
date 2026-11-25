@@ -70,7 +70,7 @@ export function InstallApp() {
   }
 
   return (
-    <aside className="mx-auto max-w-3xl px-5 pt-4 sm:px-8" aria-label="Install this app">
+    <aside className="mx-auto w-full px-4 pt-4" aria-label="Install this app">
       {installPrompt ? (
         <button type="button" className="btn-secondary" onClick={install}>Install app</button>
       ) : (

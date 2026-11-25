@@ -4,6 +4,9 @@ const nextConfig = {
   outputFileTracingRoot: process.cwd(),
   distDir: process.env.NEXT_DIST_DIR || '.next',
   poweredByHeader: false,
+  experimental: {
+    agentUpgrade: 'security',
+  },
   async headers() {
     const development = process.env.NODE_ENV !== 'production'
     const contentSecurityPolicy = [
@@ -13,7 +16,8 @@ const nextConfig = {
       "frame-ancestors 'none'",
       "form-action 'self'",
       "img-src 'self' data: blob:",
-      "style-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "font-src 'self' https://fonts.gstatic.com",
       `script-src 'self' 'unsafe-inline'${development ? " 'unsafe-eval'" : ''}`,
       "connect-src 'self' https://firebaseinstallations.googleapis.com https://fcmregistrations.googleapis.com",
       ...(development ? [] : ['upgrade-insecure-requests']),

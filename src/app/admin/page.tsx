@@ -39,20 +39,26 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     ? `Reminder: ${settings.clubName} rehearsal “${dashboard.nextRehearsal.title}” is on ${formatNairobiDate(dashboard.nextRehearsal.date)} from ${dashboard.nextRehearsal.startTime} to ${dashboard.nextRehearsal.endTime} at ${dashboard.nextRehearsal.venue}. Please arrive on time.`
     : ''
   return <div className="space-y-6">
-    <section className="card space-y-3">
+    <section className="card admin-hero space-y-3">
       <p className="text-sm font-semibold uppercase tracking-widest text-emerald-700">Committee dashboard</p>
       <h1>{settings.clubName}</h1>
       <p className="text-slate-600">Welcome, {actor.name}. Manage club work from this page.</p>
       <div className="flex flex-wrap gap-3"><Link className="btn-primary" href="/admin/members/new">Add member</Link><Link className="btn-secondary" href="/admin/rehearsals">Manage rehearsals</Link></div>
     </section>
+    <nav className="admin-quick-grid" aria-label="Dashboard shortcuts">
+      <Link href="/admin/rehearsals"><span aria-hidden="true">🎭</span>Rehearsals</Link>
+      <Link href="/admin/absences"><span aria-hidden="true">✅</span>Absences</Link>
+      <Link href="/admin/payments"><span aria-hidden="true">💳</span>Payments</Link>
+      <a href="#push-announcement"><span aria-hidden="true">📣</span>Notify</a>
+    </nav>
     <PushOptIn />
     <PushAnnouncementForm />
 
     <section className="card space-y-4"><div><h2>Members by status</h2><p className="text-sm text-slate-600">Current membership register.</p></div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{memberStatuses.map((status) => <Link key={status} className="rounded-xl border border-slate-200 p-4 hover:bg-stone-50" href={`/admin/members?status=${status}`}><span className="block text-2xl font-semibold">{statusCounts.get(status) ?? 0}</span><span className="text-sm text-slate-600">{labels[status]}</span></Link>)}</div>
+      <div className="grid grid-cols-2 gap-3">{memberStatuses.map((status) => <Link key={status} className="rounded-xl border border-slate-200 p-4 hover:bg-stone-50" href={`/admin/members?status=${status}`}><span className="block text-2xl font-semibold">{statusCounts.get(status) ?? 0}</span><span className="text-sm text-slate-600">{labels[status]}</span></Link>)}</div>
     </section>
 
-    <section className="grid gap-4 md:grid-cols-2">
+    <section className="grid gap-4">
       <article className="card space-y-3"><h2>Next rehearsal</h2>{dashboard.nextRehearsal ? <>
         <p className="font-semibold">{dashboard.nextRehearsal.title}</p><p className="text-sm text-slate-600">{formatNairobiDate(dashboard.nextRehearsal.date)} · {dashboard.nextRehearsal.startTime}–{dashboard.nextRehearsal.endTime} · {dashboard.nextRehearsal.venue}</p>
         <p className="text-sm">Status: {dashboard.nextRehearsal.status.toLowerCase()}</p>
@@ -64,7 +70,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     </section>
 
     <section className="card space-y-4"><div><h2>This month’s payments</h2><p className="text-sm text-slate-600">Successful payments for {currentNairobiMonth()} (Nairobi time).</p></div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{(['REGISTRATION', 'SUBSCRIPTION', 'RETREAT_BONDING', 'EVENT'] as const).map((type) => <article className="rounded-xl bg-stone-50 p-4" key={type}><h3>{type.replaceAll('_', ' ')}</h3><p className="mt-2 text-2xl font-semibold">{formatKES(dashboard.totals[type].amount)}</p><p className="text-sm text-slate-600">{dashboard.totals[type].count} successful {dashboard.totals[type].count === 1 ? 'payment' : 'payments'}</p></article>)}</div>
+      <div className="admin-payment-grid">{(['REGISTRATION', 'SUBSCRIPTION', 'RETREAT_BONDING', 'EVENT'] as const).map((type) => <article className="rounded-xl bg-stone-50 p-3" key={type}><h3>{type.replaceAll('_', ' ')}</h3><p className="mt-2 text-2xl font-semibold">{formatKES(dashboard.totals[type].amount)}</p><p className="text-sm text-slate-600">{dashboard.totals[type].count} successful {dashboard.totals[type].count === 1 ? 'payment' : 'payments'}</p></article>)}</div>
       <Link className="inline-flex min-h-11 items-center underline" href="/admin/payments">Open payment ledger</Link>
     </section>
 
