@@ -64,7 +64,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .phone-bar { z-index: 2; display: flex; flex: none; align-items: center; gap: 12px; border-bottom: 3px solid var(--gold); background: linear-gradient(120deg, var(--navy), var(--navy-mid)); padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 12px; color: white; }
 .phone-brand { display: inline-flex; min-height: 44px; align-items: center; gap: 12px; color: white; font-family: "Fraunces", Georgia, serif; font-size: 16px; font-weight: 700; line-height: 1.1; text-decoration: none; }
 .phone-brand-subtitle { display: block; margin-top: 3px; color: var(--gold-light); font-family: "Figtree", system-ui, sans-serif; font-size: 12px; font-weight: 500; }
-.phone-crest { display: grid; width: 40px; height: 40px; flex: none; place-items: center; border-radius: 50%; background: radial-gradient(circle at 30% 25%, var(--gold-light), var(--gold) 60%, #8c6d0b); box-shadow: 0 0 0 2px var(--navy), 0 0 0 3px var(--gold); color: var(--navy); font-size: 19px; }
+.phone-crest { width: 44px; height: 44px; flex: none; object-fit: contain; border-radius: 8px; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .35)); }
 .phone-scroll { min-height: 0; flex: 1; overflow: auto; overscroll-behavior: contain; padding-bottom: 12px; }
 .phone-scroll:has(.app-bottom-nav) { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
 main { min-height: 0; background: var(--ivory); }
