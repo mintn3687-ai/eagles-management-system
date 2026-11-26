@@ -8,6 +8,7 @@ const OFFLINE_URL = '/offline.html'
 const PRECACHE_URLS = [
   OFFLINE_URL,
   '/icon.svg',
+  '/club-logo.png',
   '/icon-192.png',
   '/icon-512.png',
   '/maskable_icon_x512.png',

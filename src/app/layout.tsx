@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   description: 'The management system for Eagles Drama Club.',
   robots: { index: false, follow: false },
   manifest: '/manifest.webmanifest',
-  icons: { icon: '/club-logo.png', apple: '/club-logo.png' },
+  icons: { icon: '/icon-192.png', apple: '/apple-touch-icon.png' },
   appleWebApp: { capable: true, title: 'Eagles Management', statusBarStyle: 'default' },
 }
 export const viewport: Viewport = { width: 'device-width', initialScale: 1, themeColor: '#0b1f4b' }
