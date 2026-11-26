@@ -2,6 +2,8 @@ import 'server-only'
 import { Prisma, type AttendanceStatus, type ReviewStatus } from '@prisma/client'
 import { prisma } from '@/lib/db'
 
+type Transaction = Prisma.TransactionClient
+
 export type AttendanceBucket = {
   memberId: string
   memberName: string
@@ -33,6 +35,32 @@ function activeStatusAtRehearsalSql() {
 }
 
 export const attendanceRepository = {
+  countConfirmedUnexcusedMisses: (tx: Transaction, memberId: string) => tx.attendance.count({
+    where: {
+      memberId,
+      status: { in: ['ABSENT', 'NO_RESPONSE'] },
+      reviewStatus: 'UNEXCUSED',
+      rehearsal: { status: 'CLOSED' },
+    },
+  }),
+  latestClosedAttendance: (tx: Transaction, memberId: string) => tx.attendance.findMany({
+    where: { memberId, rehearsal: { status: 'CLOSED' } },
+    orderBy: [
+      { rehearsal: { date: 'desc' } },
+      { rehearsal: { startTime: 'desc' } },
+      { rehearsalId: 'desc' },
+    ],
+    take: 4,
+    select: { id: true, status: true, reviewStatus: true, rehearsalId: true },
+  }),
+  memberAttendancePolicyContext: (tx: Transaction, memberId: string) => tx.member.findUnique({
+    where: { id: memberId },
+    select: { status: true, user: { select: { role: true } } },
+  }),
+  suspendMember: (tx: Transaction, memberId: string, effectiveAt: Date) => tx.member.update({
+    where: { id: memberId },
+    data: { status: 'SUSPENDED', statusHistory: { create: { status: 'SUSPENDED', effectiveAt } } },
+  }),
   buckets: async (options: { from: Date; to: Date; memberId?: string }): Promise<AttendanceBucket[]> => {
     const monthKey = monthExpression()
     const memberFilter = options.memberId ? Prisma.sql`AND m."id" = ${options.memberId}` : Prisma.empty

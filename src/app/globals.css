@@ -92,6 +92,7 @@ main { min-height: 0; background: var(--ivory); }
 .admin-quick-grid a span { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 12px; background: linear-gradient(135deg, var(--navy-mid), var(--royal)); color: white; font-size: 17px; }
 .admin-quick-grid a:nth-child(odd) span { background: linear-gradient(135deg, var(--gold-light), var(--gold)); }
 .admin-payment-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.admin-payment-grid h3 { overflow-wrap: anywhere; }
 /* Tailwind's viewport breakpoints see the desktop window around the phone frame. */
 .phone-shell [class*="sm:grid-cols-"],
 .phone-shell [class*="md:grid-cols-"],

@@ -112,6 +112,7 @@ Apply the `202610230004_model_timestamps` migration with `npm run db:migrate`.
 - New members and imported members are linked to the selected current season. Successful payments are attributed to their season and reflected in the season fee totals.
 - The Super Admin manages seasons at `/admin/rollover`; Committee and Super Admin can review member attendance and payment summaries at `/admin/members/[id]`.
 - Member attendance summaries use the same closed-rehearsal eligibility and excused-absence rules as analytics. Monetary totals are whole KES.
+- Members are automatically suspended when committee-confirmed unexcused absences reach both four consecutive closed rehearsals and five total closed rehearsals. Pending reviews and excused absences do not count; the suspension is recorded in member status history, current-season membership, and the audit log.
 - Season lifecycle changes are audited. New-season membership snapshots are stored as a SHA-256 digest; the previous season's membership rows remain unchanged.
 - Access is enforced through the central permissions layer: `seasons:manage` is Super Admin-only, while `members:read` and `payments:manage` are available to Committee and Super Admin.
 

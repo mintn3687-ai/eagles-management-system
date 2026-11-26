@@ -5,6 +5,7 @@ import type { AbsenceFilters } from './schema'
 import { AbsenceError } from './errors'
 import { attendanceWindowClosed } from '@/lib/attendance-rules'
 import { nairobiDateKey, parseNairobiDate } from '@/lib/dates'
+import { suspendForAttendanceIfEligible } from '@/modules/attendance/service'
 
 export type AbsenceListItem = Awaited<ReturnType<typeof listAbsences>>['records'][number]
 export type ReviewAction = 'EXCUSE' | 'UNEXCUSE' | 'MARK_PRESENT'
@@ -73,6 +74,7 @@ async function reviewOne(
     entityId: attendanceId,
     details: { action, reviewStatus, note: note ?? null, rehearsalId: attendance.rehearsalId, memberId: attendance.memberId },
   })
+  if (action === 'UNEXCUSE') await suspendForAttendanceIfEligible(tx, context.memberId, actorId)
 }
 
 export async function reviewSingle(input: {

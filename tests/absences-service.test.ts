@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   findMemberStatus: vi.fn(),
   findAttendance: vi.fn(),
   updateAttendance: vi.fn(),
+  suspendForAttendanceIfEligible: vi.fn(),
   writeAuditLog: vi.fn(),
 }))
 
@@ -26,6 +27,9 @@ vi.mock('../src/modules/absences/repository', () => ({
   },
 }))
 vi.mock('@/lib/audit', () => ({ writeAuditLog: mocks.writeAuditLog }))
+vi.mock('../src/modules/attendance/service', () => ({
+  suspendForAttendanceIfEligible: mocks.suspendForAttendanceIfEligible,
+}))
 
 import { reviewSingle } from '../src/modules/absences/service'
 import { AbsenceError } from '../src/modules/absences/errors'
@@ -60,6 +64,16 @@ describe('absence review service', () => {
       actorId: 'actor-1',
       action: 'ATTENDANCE_MARKED_PRESENT',
     }))
+  })
+
+  it('checks the suspension policy after a committee confirms an absence as unexcused', async () => {
+    await reviewSingle({ attendanceId: 'attendance-1', action: 'UNEXCUSE' }, 'actor-1')
+    expect(mocks.suspendForAttendanceIfEligible).toHaveBeenCalledWith({}, 'member-1', 'actor-1')
+  })
+
+  it('does not check the suspension policy for an excused absence', async () => {
+    await reviewSingle({ attendanceId: 'attendance-1', action: 'EXCUSE' }, 'actor-1')
+    expect(mocks.suspendForAttendanceIfEligible).not.toHaveBeenCalled()
   })
 
   it('rejects a cancelled rehearsal before changing attendance', async () => {
