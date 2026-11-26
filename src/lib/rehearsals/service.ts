@@ -362,25 +362,27 @@ export async function getMemberDashboard() {
   const member = user.member
   if (!member) return { today: null, next: null, recent: [] }
   const todayKey = nairobiDateKey()
-  const upcoming = await prisma.rehearsal.findMany({
-    where: {
-      status: { not: 'CANCELLED' },
-      date: { gte: parseNairobiDate(todayKey) },
-    },
-    orderBy: { date: 'asc' },
-    take: 10,
-  })
+  const [upcoming, recent] = await Promise.all([
+    prisma.rehearsal.findMany({
+      where: {
+        status: { not: 'CANCELLED' },
+        date: { gte: parseNairobiDate(todayKey) },
+      },
+      orderBy: { date: 'asc' },
+      take: 10,
+    }),
+    prisma.attendance.findMany({
+      where: { memberId: member.id },
+      select: {
+        id: true, status: true, markedBy: true, markedAt: true, reviewStatus: true,
+        rehearsal: { select: { id: true, title: true, date: true, startTime: true, endTime: true, status: true } },
+      },
+      orderBy: { rehearsal: { date: 'desc' } },
+      take: 5,
+    }),
+  ])
   const today = upcoming.find((r) => nairobiDateKey(r.date) === todayKey) ?? null
   const next = upcoming.find((r) => nairobiDateKey(r.date) !== todayKey) ?? null
-  const recent = await prisma.attendance.findMany({
-    where: { memberId: member.id },
-    select: {
-      id: true, status: true, markedBy: true, markedAt: true, reviewStatus: true,
-      rehearsal: { select: { id: true, title: true, date: true, startTime: true, endTime: true, status: true } },
-    },
-    orderBy: { rehearsal: { date: 'desc' } },
-    take: 5,
-  })
   return { today, next, recent }
 }
 

@@ -1,4 +1,5 @@
 import 'server-only'
+import { cache } from 'react'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/db'
 import type { UserRole } from '@prisma/client'
@@ -14,7 +15,7 @@ export class AccessError extends Error {
 export { hasPermission, permissionRoles, roleLevel }
 export type { Permission }
 
-export async function requireUser() {
+export const requireUser = cache(async function requireUser() {
   const session = await auth()
   if (!session?.user?.id) throw new AccessError(401, 'LOGIN')
   const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: {
@@ -25,7 +26,7 @@ export async function requireUser() {
   if (!user.passwordHash || passwordVersion(user.passwordHash) !== session.user.passwordVersion) throw new AccessError(401, 'LOGIN')
   const { passwordHash: _passwordHash, ...safeUser } = user
   return safeUser
-}
+})
 
 export function isRestricted(user: Awaited<ReturnType<typeof requireUser>>) {
   return user.member?.status === 'SUSPENDED' || user.member?.status === 'INACTIVE'
